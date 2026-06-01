@@ -6,37 +6,36 @@
     <title>T-Rex Runner</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
-        html,body{width:100%;height:100%;background:#16213e;font-family:monospace}
-        body{display:flex;flex-direction:column;align-items:center;overflow:auto}
-        .hud{display:flex;justify-content:center;gap:20px;padding:8px 0;font-size:16px}
+        html,body{width:100%;height:100%;background:#16213e;font-family:monospace;overflow:hidden}
+        body{display:flex;flex-direction:column;align-items:center;justify-content:center}
+        .hud{display:flex;justify-content:center;gap:20px;padding:6px 0;font-size:18px}
         .sc{font-weight:bold;color:#e94560}
-        .hi{font-size:12px;color:#555;line-height:22px}
-        #c{display:block;width:100%;max-width:800px;touch-action:none;background:#16213e}
-        .info{color:#666;font-size:11px;padding:6px 0;text-align:center}
+        .hi{font-size:13px;color:#555;line-height:22px}
+        #c{display:block;touch-action:none;background:#16213e;border:1px solid #333}
+        .info{color:#666;font-size:11px;padding:4px 0;text-align:center}
         .warn{color:#e94560}
 
         .touch-controls{
             display:none;
             position:fixed;bottom:0;left:0;right:0;
-            padding:12px 20px 28px;
+            padding:10px 16px 30px;
             justify-content:space-between;align-items:flex-end;
-            z-index:10;user-select:none;-webkit-user-select:none;
-            pointer-events:none;
+            z-index:100;user-select:none;-webkit-user-select:none;
         }
         .touch-controls.show{display:flex}
         .touch-btn{
-            width:62px;height:62px;border-radius:50%;
-            border:2px solid rgba(255,255,255,0.3);
-            background:rgba(255,255,255,0.08);
-            color:#fff;font-size:22px;
+            width:64px;height:64px;border-radius:50%;
+            border:2px solid rgba(255,255,255,0.35);
+            background:rgba(255,255,255,0.1);
+            color:#fff;font-size:24px;
             display:flex;align-items:center;justify-content:center;
             -webkit-tap-highlight-color:transparent;
-            pointer-events:auto;
+            touch-action:none;
         }
-        .touch-btn:active{background:rgba(233,69,96,0.5);border-color:#e94560}
-        .touch-dpad{display:flex;gap:10px}
-        .touch-right{display:flex;gap:10px;align-items:flex-end}
-        .touch-btn.duck-btn{width:54px;height:54px;font-size:18px;align-self:center}
+        .touch-btn:active{background:rgba(233,69,96,0.6);border-color:#e94560}
+        .touch-dpad{display:flex;gap:12px}
+        .touch-right{display:flex;gap:12px;align-items:flex-end}
+        .touch-btn.duck-btn{width:56px;height:56px;font-size:20px;align-self:center}
     </style>
 </head>
 <body>
@@ -44,12 +43,12 @@
     <div class="sc" id="sc">00000</div>
     <div class="hi">HI <span id="hi">00000</span></div>
 </div>
-<canvas id="c" width="800" height="260"></canvas>
-<div class="info">
-    <span class="warn">← →</span> 左右移动 |
+<canvas id="c"></canvas>
+<div class="info" id="infoBar">
+    <span class="warn">← →</span> 左右 |
     <span class="warn">空格/↑</span> 跳跃(可二段跳) |
     <span class="warn">↓</span> 蹲下 |
-    注意躲避上方掉落物
+    躲避掉落物
 </div>
 
 <div class="touch-controls" id="tc">
@@ -65,23 +64,28 @@
 </div>
 
 <script>
-const cv=document.getElementById('c'),cx=cv.getContext('2d'),W=800,H=260,GY=210;
+const cv=document.getElementById('c'),cx=cv.getContext('2d');
+const W=800,H=260,GY=210;
 const MOVE_SPEED=5;
 
-// 移动端 canvas 兼容
-cv.width=W;cv.height=H;
-
-// 确保 canvas 在移动端正确显示
+// ====== 屏幕自适应 ======
+const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
 function resizeCanvas(){
+    // 手机：canvas 占满宽度，高度按比例
+    // 电脑：最大 800px
+    const maxW=Math.min(window.innerWidth-16,800);
+    const maxH=isMobile?window.innerHeight*0.42:400; // 手机上 canvas 最多占 42% 高度
     const ratio=W/H;
-    const maxW=Math.min(window.innerWidth,800);
-    cv.style.width=maxW+'px';
-    cv.style.height=Math.floor(maxW/ratio)+'px';
+    let cw=maxW,ch=Math.floor(maxW/ratio);
+    if(ch>maxH){ch=maxH;cw=Math.floor(ch*ratio);}
+    cv.width=W;cv.height=H; // 内部分辨率不变
+    cv.style.width=cw+'px';
+    cv.style.height=ch+'px';
 }
 resizeCanvas();
 window.addEventListener('resize',resizeCanvas);
 
-// 嘲讽系统
+// ====== 嘲讽系统 ======
 const taunts={
     die:['💀 你死了！','🤡 又没了？','😤 太菜了！','🎯 瞄准点好吗','😂 笑死我了','🧠 反应速度负数','🦴 变成骨头了','👻 下次加油','🎮 手残党认证','💀 再来一次？'],
     hit:['😱 好险！','😅 差一点','⚡ 电光火石','🙈 没看见！','🫣 这都能撞'],
@@ -92,7 +96,6 @@ const taunts={
     fast:['🚀 速度不错！','💨 风一样的速度','⚡ 快如闪电'],
     combo:['🔥 连续闪避！','💫 完美操作！','🎯 躲得漂亮！','⭐ 技术不错！']
 };
-
 let currentTaunt='',tauntTimer=0,tauntColor='#fff',hitCombo=0,lastTauntTime=0,idleTimer=0;
 
 function showTaunt(type,custom){
@@ -104,28 +107,23 @@ function showTaunt(type,custom){
     tauntColor=type==='die'?'#e94560':(type==='hit'?'#ff6b35':(type==='combo'?'#ffd700':'#fff'));
     lastTauntTime=now;
 }
-
 function drawTaunt(){
     if(tauntTimer>0){
         tauntTimer--;
-        const alpha=Math.min(1,tauntTimer/20);
-        cx.globalAlpha=alpha;
-        cx.fillStyle=tauntColor;
-        cx.font='bold 16px monospace';
-        cx.textAlign='center';
-        const shake=tauntTimer>60?Math.random()*4-2:0;
-        cx.fillText(currentTaunt,W/2+shake,60+shake);
-        cx.fillStyle='rgba(0,0,0,0.3)';
-        cx.fillText(currentTaunt,W/2+shake+2,62+shake);
+        cx.globalAlpha=Math.min(1,tauntTimer/20);
+        cx.fillStyle=tauntColor;cx.font='bold 16px monospace';cx.textAlign='center';
+        const sk=tauntTimer>60?Math.random()*4-2:0;
+        cx.fillText(currentTaunt,W/2+sk,60+sk);
+        cx.fillStyle='rgba(0,0,0,0.3)';cx.fillText(currentTaunt,W/2+sk+2,62+sk);
         cx.globalAlpha=1;
     }
 }
 
+// ====== 恐龙 ======
 const D={
     x:W/2-16,y:GY-40,w:32,h:40,
     vy:0,vx:0,gnd:true,dbl:true,
     duck:false,fr:0,tm:0,faceR:true,
-
     reset(){this.x=W/2-16;this.y=GY-this.h;this.vy=0;this.vx=0;this.gnd=true;this.dbl=true;this.duck=false;this.h=40;this.faceR=true;},
     jump(){if(this.gnd){this.vy=-14;this.gnd=false;this.dbl=true;}else if(this.dbl){this.vy=-12;this.dbl=false;spark(this.x+16,this.y+this.h,6);showTaunt('doubleJump');}},
     setDuck(v){if(v&&this.gnd){this.duck=true;this.h=24;this.y=GY-24;showTaunt('duck');}else if(!v){this.duck=false;this.h=40;this.y=GY-40;}},
@@ -152,23 +150,15 @@ const D={
             cx.fillRect(x+(f?(this.fr?18:24):(this.fr?8:18)),y+16,7,8);
         }else{
             cx.fillRect(x+4,y+10,22,20);
-            if(f){
-                cx.fillRect(x+14,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+30,y+3,5,5);cx.fillStyle='#e94560';
-                cx.fillRect(x+32,y+4,2,2);cx.fillRect(x+36,y+12,4,2);
-                cx.fillRect(x,y+10,6,4);cx.fillRect(x-2,y+7,4,5);
-                cx.fillRect(x+24,y+18,7,3);
-            }else{
-                cx.fillRect(x-4,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+2,y+3,5,5);cx.fillStyle='#e94560';
-                cx.fillRect(x+4,y+4,2,2);cx.fillRect(x-2,y+12,4,2);
-                cx.fillRect(x+22,y+10,6,4);cx.fillRect(x+26,y+7,4,5);
-                cx.fillRect(x+5,y+18,7,3);
-            }
+            if(f){cx.fillRect(x+14,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+30,y+3,5,5);cx.fillStyle='#e94560';cx.fillRect(x+32,y+4,2,2);cx.fillRect(x+36,y+12,4,2);cx.fillRect(x,y+10,6,4);cx.fillRect(x-2,y+7,4,5);cx.fillRect(x+24,y+18,7,3);}
+            else{cx.fillRect(x-4,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+2,y+3,5,5);cx.fillStyle='#e94560';cx.fillRect(x+4,y+4,2,2);cx.fillRect(x-2,y+12,4,2);cx.fillRect(x+22,y+10,6,4);cx.fillRect(x+26,y+7,4,5);cx.fillRect(x+5,y+18,7,3);}
             if(this.gnd){if(this.fr){cx.fillRect(x+6,y+30,6,10);cx.fillRect(x+18,y+30,6,10);}else{cx.fillRect(x+10,y+30,6,10);cx.fillRect(x+14,y+30,6,10);}}
             else{cx.fillRect(x+6,y+30,6,8);cx.fillRect(x+18,y+32,6,6);}
         }
     }
 };
 
+// ====== 障碍物 ======
 let obs=[],sparkP=[],warningX=null,warningTimer=0;
 
 function spawnObs(){
@@ -179,7 +169,7 @@ function spawnObs(){
         const t=types[Math.floor(Math.random()*types.length)];
         let w,h;
         switch(t){case'spike':w=14;h=28;break;case'tallSpike':w=16;h=40;break;case'doubleSpike':w=30;h=30;break;}
-        obs.push({x,dir:1,w,h,t,speed:0});
+        obs.push({x,dir:1,w,h,t});
     }else if(r<0.75&&score>30){
         const x=D.faceR?-40:W+20;
         const types=['fireball','saw'];
@@ -233,8 +223,8 @@ function drawObs(){
         }
     });
     if(warningTimer>0&&warningX!==null){
-        const alpha=(Math.sin(Date.now()/80)*0.3+0.4)*(warningTimer/50);
-        cx.fillStyle=`rgba(255,215,0,${alpha})`;cx.fillRect(warningX-5,0,30,GY);
+        cx.fillStyle=`rgba(255,215,0,${(Math.sin(Date.now()/80)*0.3+0.4)*(warningTimer/50)})`;
+        cx.fillRect(warningX-5,0,30,GY);
         cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(warningX+10,10);cx.lineTo(warningX+5,25);cx.lineTo(warningX+15,25);cx.closePath();cx.fill();
         cx.font='12px monospace';cx.textAlign='center';cx.fillText('⚠',warningX+10,40);
         warningTimer--;
@@ -256,29 +246,42 @@ function drawHUD(){
 
 function pad(n){return String(Math.floor(n)).padStart(5,'0');}
 
-let state='idle',score=0,speed=5,frame=0,hi=parseInt(localStorage.getItem('dh')||'0');
+// ====== 时间基准（修复手机速度问题）======
+let state='idle',score=0,speed=5,hi=parseInt(localStorage.getItem('dh')||'0');
 let spawnT=0,spawnI=70,keys={},distance=0;
+let lastTime=0;
 document.getElementById('hi').textContent=pad(hi);
 
-function init(){D.reset();obs=[];sparkP=[];score=0;speed=5;frame=0;spawnT=0;spawnI=40;keys={};warningX=null;warningTimer=0;distance=0;idleTimer=0;hitCombo=0;document.getElementById('sc').textContent='00000';}
+function init(){
+    D.reset();obs=[];sparkP=[];score=0;speed=5;spawnT=0;spawnI=40;keys={};
+    warningX=null;warningTimer=0;distance=0;idleTimer=0;hitCombo=0;lastTime=0;
+    document.getElementById('sc').textContent='00000';
+}
 
-function loop(){
+function loop(ts){
     requestAnimationFrame(loop);
+    if(!lastTime)lastTime=ts;
+    const dt=Math.min((ts-lastTime)/16.67,3); // 归一化到 60fps，上限 3 帧防止跳帧
+    lastTime=ts;
+
     if(state==='run'){
         if(keys['ArrowLeft']||keys['KeyA'])D.moveLeft();
         else if(keys['ArrowRight']||keys['KeyD'])D.moveRight();
         else D.stopMove();
     }
+
     cx.clearRect(0,0,W,H);
     const g=cx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f0c29');g.addColorStop(1,'#16213e');cx.fillStyle=g;cx.fillRect(0,0,W,H);
     drawGround();
 
     if(state==='run'){
-        frame++;score+=0.2;document.getElementById('sc').textContent=pad(score);
-        distance+=speed;if(speed<14)speed=5+distance*0.0001;
-        if(speed>10&&Math.random()<0.002)showTaunt('fast');
+        score+=0.2*dt;document.getElementById('sc').textContent=pad(score);
+        distance+=speed*dt;
+        if(speed<14)speed=5+distance*0.0001;
+        if(speed>10&&Math.random()<0.002*dt)showTaunt('fast');
         spawnI=Math.max(20,50-Math.floor(speed*3));
-        spawnT++;if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
+        spawnT+=dt;
+        if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
         updObs();D.upd();updSpark();
     }
 
@@ -288,15 +291,15 @@ function loop(){
 
     if(state==='idle'){
         cx.fillStyle='#e94560';cx.font='16px monospace';cx.textAlign='center';
-        if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'点屏幕开始':'按 空格 开始',W/2,90);
+        if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'👇 点屏幕开始':'按 空格 开始',W/2,90);
         cx.font='11px monospace';cx.fillStyle='#666';
-        cx.fillText(isMobile?'点 ▲ 跳跃 | 点 ◀▶ 移动 | 点 ▼ 蹲下':'← → 移动 | 空格跳跃 | ↓蹲下',W/2,115);
+        cx.fillText(isMobile?'点 ▲ 跳跃 | ◀▶ 移动 | ▼ 蹲下':'← → 移动 | 空格跳跃 | ↓蹲下',W/2,115);
     }
     if(state==='over'){
         cx.fillStyle='#e94560';cx.font='bold 22px monospace';cx.textAlign='center';
         cx.fillText('GAME OVER',W/2,80);
         cx.font='14px monospace';
-        if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'点屏幕重开':'按 空格 重开',W/2,105);
+        if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'👇 点屏幕重开':'按 空格 重开',W/2,105);
         cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),W/2,125);
         cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(distance)+'m',W/2,145);
     }
@@ -305,33 +308,39 @@ function loop(){
 function startGame(){init();state='run';showTaunt('hit',Math.random()<0.5?'🎮 开始了！':'🏃 冲啊！');}
 function endGame(){state='over';D.vx=0;hitCombo=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
 
-// 键盘
+// ====== 键盘控制 ======
 let _sp=false;
 onkeydown=e=>{keys[e.code]=true;if((e.code==='Space'||e.code==='ArrowUp')&&!_sp){e.preventDefault();_sp=true;if(state==='run')D.jump();else startGame();}if(e.code==='ArrowDown'){e.preventDefault();if(state==='run')D.setDuck(true);}};
 onkeyup=e=>{keys[e.code]=false;if(e.code==='Space'||e.code==='ArrowUp')_sp=false;if(e.code==='ArrowDown')D.setDuck(false);};
 
-// 点击 canvas 开始
-cv.addEventListener('click',()=>{if(state!=='run')startGame();});
-cv.addEventListener('touchstart',e=>{e.preventDefault();if(state==='run')D.jump();else startGame();},{passive:false});
-
 // ====== 手机触控 ======
-const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
-const tc=document.getElementById('tc');
-if(isMobile)tc.classList.add('show');
+if(isMobile){
+    document.getElementById('tc').classList.add('show');
+    document.getElementById('infoBar').style.display='none'; // 手机上隐藏键盘提示
+}
 
+// 虚拟按钮：左右移动（长按持续移动，松手停止）
 function bindBtn(id,downFn,upFn){
     const el=document.getElementById(id);
-    el.addEventListener('touchstart',e=>{e.preventDefault();downFn();},{passive:false});
-    el.addEventListener('touchend',e=>{e.preventDefault();upFn();},{passive:false});
-    el.addEventListener('touchcancel',()=>{upFn();});
+    el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();downFn();});
+    el.addEventListener('pointerup',e=>{e.preventDefault();e.stopPropagation();upFn();});
+    el.addEventListener('pointerleave',e=>{upFn();});
+    el.addEventListener('pointercancel',e=>{upFn();});
 }
 bindBtn('btnL',()=>D.moveLeft(),()=>D.stopMove());
 bindBtn('btnR',()=>D.moveRight(),()=>D.stopMove());
-bindBtn('btnD',()=>D.setDuck(true),()=>D.setDuck(false));
-document.getElementById('btnJ').addEventListener('touchstart',e=>{e.preventDefault();if(state==='run')D.jump();else startGame();},{passive:false});
-document.getElementById('btnS').addEventListener('touchstart',e=>{e.preventDefault();if(state==='run')D.jump();else startGame();},{passive:false});
+bindBtn('btnD',()=>{D.setDuck(true);},()=>{D.setDuck(false);});
 
-console.log('Game loaded. Mobile:',isMobile,'Canvas:',cv.width,'x',cv.height);
+// 跳跃 & 开始（用 pointerdown 确保响应）
+function bindTap(id,fn){
+    document.getElementById(id).addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();});
+}
+bindTap('btnJ',()=>{if(state==='run')D.jump();else startGame();});
+bindTap('btnS',()=>{if(state==='run')D.jump();else startGame();});
+
+// 点击 canvas 开始
+cv.addEventListener('click',()=>{if(state!=='run')startGame();});
+
 requestAnimationFrame(loop);
 </script>
 </body>
