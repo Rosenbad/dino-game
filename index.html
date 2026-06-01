@@ -15,6 +15,19 @@
         .info{color:#666;font-size:11px;padding:4px 0;text-align:center}
         .warn{color:#e94560}
 
+        /* 手机横屏提示 */
+        .rotate-hint{
+            display:none;position:fixed;inset:0;z-index:999;
+            background:#16213e;color:#fff;font-size:18px;
+            flex-direction:column;align-items:center;justify-content:center;gap:12px;
+        }
+        .rotate-hint .icon{font-size:48px;animation:spin 1.5s ease-in-out infinite}
+        @keyframes spin{0%,100%{transform:rotate(0)}50%{transform:rotate(90deg)}}
+        @media (orientation:portrait) and (max-width:768px){
+            .rotate-hint.show{display:flex}
+            .hud,.info,#c,.touch-controls{display:none!important}
+        }
+
         .touch-controls{
             display:none;
             position:fixed;bottom:0;left:0;right:0;
@@ -32,13 +45,20 @@
             -webkit-tap-highlight-color:transparent;
             touch-action:none;
         }
-        .touch-btn:active{background:rgba(233,69,96,0.6);border-color:#e94560}
+        .touch-btn.pressed{background:rgba(233,69,96,0.6);border-color:#e94560}
         .touch-dpad{display:flex;gap:12px}
         .touch-right{display:flex;gap:12px;align-items:flex-end}
         .touch-btn.duck-btn{width:56px;height:56px;font-size:20px;align-self:center}
     </style>
 </head>
 <body>
+
+<!-- 竖屏提示 -->
+<div class="rotate-hint" id="rotateHint">
+    <div class="icon">📱↻</div>
+    <div>请旋转手机到横屏模式</div>
+</div>
+
 <div class="hud">
     <div class="sc" id="sc">00000</div>
     <div class="hi">HI <span id="hi">00000</span></div>
@@ -71,19 +91,31 @@ const MOVE_SPEED=5;
 // ====== 屏幕自适应 ======
 const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
 function resizeCanvas(){
-    // 手机：canvas 占满宽度，高度按比例
-    // 电脑：最大 800px
     const maxW=Math.min(window.innerWidth-16,800);
-    const maxH=isMobile?window.innerHeight*0.42:400; // 手机上 canvas 最多占 42% 高度
+    const maxH=isMobile?window.innerHeight*0.55:400;
     const ratio=W/H;
     let cw=maxW,ch=Math.floor(maxW/ratio);
     if(ch>maxH){ch=maxH;cw=Math.floor(ch*ratio);}
-    cv.width=W;cv.height=H; // 内部分辨率不变
+    cv.width=W;cv.height=H;
     cv.style.width=cw+'px';
     cv.style.height=ch+'px';
 }
 resizeCanvas();
 window.addEventListener('resize',resizeCanvas);
+
+// 横屏检测
+const rotateHint=document.getElementById('rotateHint');
+function checkOrientation(){
+    if(isMobile){
+        const landscape=window.innerWidth>window.innerHeight;
+        rotateHint.classList.toggle('show',!landscape);
+    }
+}
+checkOrientation();
+window.addEventListener('resize',checkOrientation);
+window.addEventListener('orientationchange',()=>{
+    setTimeout(checkOrientation,300);
+});
 
 // ====== 嘲讽系统 ======
 const taunts={
@@ -246,7 +278,7 @@ function drawHUD(){
 
 function pad(n){return String(Math.floor(n)).padStart(5,'0');}
 
-// ====== 时间基准（修复手机速度问题）======
+// ====== 时间基准 ======
 let state='idle',score=0,speed=5,hi=parseInt(localStorage.getItem('dh')||'0');
 let spawnT=0,spawnI=70,keys={},distance=0;
 let lastTime=0;
@@ -261,11 +293,14 @@ function init(){
 function loop(ts){
     requestAnimationFrame(loop);
     if(!lastTime)lastTime=ts;
-    const dt=Math.min((ts-lastTime)/16.67,3); // 归一化到 60fps，上限 3 帧防止跳帧
+    const dt=Math.min((ts-lastTime)/16.67,3);
     lastTime=ts;
 
+    // ====== 触控按钮状态驱动移动（核心修复）======
     if(state==='run'){
-        if(keys['ArrowLeft']||keys['KeyA'])D.moveLeft();
+        if(btnState.left)D.moveLeft();
+        else if(btnState.right)D.moveRight();
+        else if(keys['ArrowLeft']||keys['KeyA'])D.moveLeft();
         else if(keys['ArrowRight']||keys['KeyD'])D.moveRight();
         else D.stopMove();
     }
@@ -313,32 +348,91 @@ let _sp=false;
 onkeydown=e=>{keys[e.code]=true;if((e.code==='Space'||e.code==='ArrowUp')&&!_sp){e.preventDefault();_sp=true;if(state==='run')D.jump();else startGame();}if(e.code==='ArrowDown'){e.preventDefault();if(state==='run')D.setDuck(true);}};
 onkeyup=e=>{keys[e.code]=false;if(e.code==='Space'||e.code==='ArrowUp')_sp=false;if(e.code==='ArrowDown')D.setDuck(false);};
 
-// ====== 手机触控 ======
+// ====== 手机触控（状态驱动，修复移动问题）======
 if(isMobile){
     document.getElementById('tc').classList.add('show');
-    document.getElementById('infoBar').style.display='none'; // 手机上隐藏键盘提示
+    document.getElementById('infoBar').style.display='none';
 }
 
-// 虚拟按钮：左右移动（长按持续移动，松手停止）
-function bindBtn(id,downFn,upFn){
+// 按钮状态：按下=1，松开=0
+const btnState={left:false,right:false,duck:false};
+
+// 获取所有触摸点 ID，判断按钮是否仍被按住
+const activeTouches=new Map(); // touchId -> buttonId
+
+function updateBtnVisual(id,pressed){
     const el=document.getElementById(id);
-    el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();downFn();});
-    el.addEventListener('pointerup',e=>{e.preventDefault();e.stopPropagation();upFn();});
-    el.addEventListener('pointerleave',e=>{upFn();});
-    el.addEventListener('pointercancel',e=>{upFn();});
+    if(el)el.classList.toggle('pressed',pressed);
 }
-bindBtn('btnL',()=>D.moveLeft(),()=>D.stopMove());
-bindBtn('btnR',()=>D.moveRight(),()=>D.stopMove());
-bindBtn('btnD',()=>{D.setDuck(true);},()=>{D.setDuck(false);});
 
-// 跳跃 & 开始（用 pointerdown 确保响应）
-function bindTap(id,fn){
-    document.getElementById(id).addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn();});
+// 手指按下
+function onBtnDown(btnId,action){
+    btnState[btnId]=true;
+    updateBtnVisual(btnId==='left'?'btnL':btnId==='right'?'btnR':'btnD',true);
+    if(action==='moveLeft')D.moveLeft();
+    else if(action==='moveRight')D.moveRight();
+    else if(action==='duck')D.setDuck(true);
+    else if(action==='jump'){
+        if(state==='run')D.jump();else startGame();
+    }
 }
-bindTap('btnJ',()=>{if(state==='run')D.jump();else startGame();});
-bindTap('btnS',()=>{if(state==='run')D.jump();else startGame();});
 
-// 点击 canvas 开始
+// 手指松开
+function onBtnUp(btnId,action){
+    btnState[btnId]=false;
+    updateBtnVisual(btnId==='left'?'btnL':btnId==='right'?'btnR':'btnD',false);
+    if(action==='moveLeft'||action==='moveRight')D.stopMove();
+    else if(action==='duck')D.setDuck(false);
+}
+
+// 绑定按钮：pointerdown/pointerup/pointercancel 都用状态驱动
+function bindBtn2(elId,btnId,action){
+    const el=document.getElementById(elId);
+    el.addEventListener('pointerdown',e=>{
+        e.preventDefault();e.stopPropagation();
+        onBtnDown(btnId,action);
+    });
+    el.addEventListener('pointerup',e=>{
+        e.preventDefault();e.stopPropagation();
+        onBtnUp(btnId,action);
+    });
+    el.addEventListener('pointercancel',e=>{
+        onBtnUp(btnId,action);
+    });
+    // 不用 pointerleave — 手指滑出按钮区域后由全局 touchmove/touchend 处理
+}
+bindBtn2('btnL','left','moveLeft');
+bindBtn2('btnR','right','moveRight');
+bindBtn2('btnD','duck','duck');
+
+// 跳跃按钮（单击，不需要状态）
+document.getElementById('btnJ').addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    if(state==='run')D.jump();else startGame();
+});
+document.getElementById('btnS').addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    if(state==='run')D.jump();else startGame();
+});
+
+// 全局触摸监控：手指滑出按钮或离开屏幕时，停止移动/蹲下
+document.addEventListener('touchend',e=>{
+    // 如果没有剩余触摸点了，全部松开
+    if(e.touches.length===0){
+        if(btnState.left)onBtnUp('left','moveLeft');
+        if(btnState.right)onBtnUp('right','moveRight');
+        if(btnState.duck)onBtnUp('duck','duck');
+    }
+});
+document.addEventListener('touchcancel',e=>{
+    if(e.touches.length===0){
+        if(btnState.left)onBtnUp('left','moveLeft');
+        if(btnState.right)onBtnUp('right','moveRight');
+        if(btnState.duck)onBtnUp('duck','duck');
+    }
+});
+
+// canvas 点击开始（桌面端）
 cv.addEventListener('click',()=>{if(state!=='run')startGame();});
 
 requestAnimationFrame(loop);
