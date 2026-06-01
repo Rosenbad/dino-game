@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T-Rex Runner</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{background:#16213e;display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:monospace;overflow:hidden}
+        .wrap{text-align:center;width:100%;max-width:800px;padding:0 8px}
+        .hud{display:flex;justify-content:center;gap:30px;padding:8px;margin-bottom:6px}
+        .sc{font-size:20px;font-weight:bold;color:#e94560}
+        .hi{font-size:13px;color:#555}
+        canvas{display:block;cursor:pointer;width:100%;height:auto}
+        .info{margin-top:10px;color:#666;font-size:11px}
+        .warn{color:#e94560}
+
+        /* 手机虚拟按键 */
+        .touch-controls{
+            display:none;
+            position:fixed;bottom:0;left:0;right:0;
+            padding:10px 16px 20px;
+            justify-content:space-between;align-items:flex-end;
+            z-index:10;user-select:none;-webkit-user-select:none;
+        }
+        .touch-controls.show{display:flex}
+        .touch-btn{
+            width:60px;height:60px;border-radius:50%;
+            border:2px solid rgba(255,255,255,0.3);
+            background:rgba(255,255,255,0.1);
+            color:#fff;font-size:22px;
+            display:flex;align-items:center;justify-content:center;
+            -webkit-tap-highlight-color:transparent;
+            transition:background 0.1s;
+        }
+        .touch-btn:active{background:rgba(233,69,96,0.5);border-color:#e94560}
+        .touch-dpad{display:flex;gap:8px}
+        .touch-right{display:flex;gap:8px;align-items:flex-end}
+        .touch-btn.duck-btn{
+            width:54px;height:54px;font-size:18px;
+            align-self:center;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud">
+        <div class="sc" id="sc">00000</div>
+        <div class="hi">HI <span id="hi">00000</span></div>
+    </div>
+    <canvas id="c" width="800" height="260"></canvas>
+    <div class="info">
+        <span class="warn">← →</span> 左右移动 |
+        <span class="warn">空格/↑</span> 跳跃(可二段跳) |
+        <span class="warn">↓</span> 蹲下 |
+        注意躲避上方掉落物
+    </div>
+</div>
+<div class="touch-controls" id="tc">
+    <div class="touch-dpad">
+        <div class="touch-btn" id="btnL">◀</div>
+        <div class="touch-btn duck-btn" id="btnD">▼</div>
+        <div class="touch-btn" id="btnR">▶</div>
+    </div>
+    <div class="touch-right">
+        <div class="touch-btn" id="btnJ">▲</div>
+        <div class="touch-btn" id="btnS">A</div>
+    </div>
+</div>
+<script>
+const cv=document.getElementById('c'),cx=cv.getContext('2d'),W=800,H=260,GY=210;
+const MOVE_SPEED=5;
+
+// 嘲讽系统
+const taunts={
+    die:[
+        '💀 你死了！',
+        '🤡 又没了？',
+        '😤 太菜了！',
+        '🎯 瞄准点好吗',
+        '😂 笑死我了',
+        '🧠 反应速度负数',
+        '🦴 变成骨头了',
+        '👻 下次加油',
+        '🎮 手残党认证',
+        '💀 再来一次？',
+    ],
+    hit:[
+        '😱 好险！',
+        '😅 差一点',
+        '⚡ 电光火石',
+        '🙈 没看见！',
+        '🫣 这都能撞',
+    ],
+    idle:[
+        '😴 睡着了？',
+        '🦥 比乌龟还慢',
+        '🐢 动一下啊',
+        '⌛ 等你到明年',
+    ],
+    close:[
+        '🤏 差一点就过了',
+        '💀 险些丧命',
+        '😰 吓死我了',
+    ],
+    doubleJump:[
+        '🦘 二段跳！',
+        '✨ 漂亮！',
+        '🔥 操作不错',
+    ],
+    duck:[
+        '🦆 蹲下躲避',
+        '🥷 忍者蹲',
+    ],
+    fast:[
+        '🚀 速度不错！',
+        '💨 风一样的速度',
+        '⚡ 快如闪电',
+    ],
+    combo:[
+        '🔥 连续闪避！',
+        '💫 完美操作！',
+        '🎯 躲得漂亮！',
+        '⭐ 技术不错！',
+    ]
+};
+
+let currentTaunt='';
+let tauntTimer=0;
+let tauntColor='#fff';
+let hitCombo=0;
+let lastTauntTime=0;
+let idleTimer=0;
+
+function showTaunt(type,custom){
+    const now=Date.now();
+    if(now-lastTauntTime<800)return; // 防止嘲讽太频繁
+    const arr=taunts[type];
+    currentTaunt=custom||arr[Math.floor(Math.random()*arr.length)];
+    tauntTimer=80; // 显示80帧
+    tauntColor=type==='die'?'#e94560':(type==='hit'?'#ff6b35':(type==='combo'?'#ffd700':'#fff'));
+    lastTauntTime=now;
+}
+
+function drawTaunt(){
+    if(tauntTimer>0){
+        tauntTimer--;
+        const alpha=Math.min(1,tauntTimer/20);
+        cx.globalAlpha=alpha;
+        cx.fillStyle=tauntColor;
+        cx.font='bold 16px monospace';
+        cx.textAlign='center';
+        // 抖动效果
+        const shake=tauntTimer>60?Math.random()*4-2:0;
+        cx.fillText(currentTaunt,W/2+shake,60+shake);
+        // 阴影
+        cx.fillStyle='rgba(0,0,0,0.3)';
+        cx.fillText(currentTaunt,W/2+shake+2,62+shake);
+        cx.globalAlpha=1;
+    }
+}
+
+// 恐龙
+const D={
+    x:W/2-16,y:GY-40,w:32,h:40,
+    vy:0,vx:0,gnd:true,dbl:true,
+    duck:false,fr:0,tm:0,
+    faceR:true,
+
+    reset(){this.x=W/2-16;this.y=GY-this.h;this.vy=0;this.vx=0;this.gnd=true;this.dbl=true;this.duck=false;this.h=40;this.faceR=true;},
+
+    jump(){
+        if(this.gnd){this.vy=-14;this.gnd=false;this.dbl=true;}
+        else if(this.dbl){this.vy=-12;this.dbl=false;spark(this.x+16,this.y+this.h,6);showTaunt('doubleJump');}
+    },
+
+    setDuck(v){
+        if(v&&this.gnd){this.duck=true;this.h=24;this.y=GY-24;showTaunt('duck');}
+        else if(!v){this.duck=false;this.h=40;this.y=GY-40;}
+    },
+
+    moveLeft(){this.vx=-MOVE_SPEED;this.faceR=false;},
+    moveRight(){this.vx=MOVE_SPEED;this.faceR=true;},
+    stopMove(){this.vx=0;},
+
+    upd(){
+        // 左右移动
+        this.x+=this.vx;
+        if(this.x<0)this.x=0;
+        if(this.x>W-this.w)this.x=W-this.w;
+
+        // 跳跃
+        if(!this.gnd){
+            this.vy+=0.6;
+            this.y+=this.vy;
+            if(this.y>=GY-this.h){this.y=GY-this.h;this.vy=0;this.gnd=true;this.dbl=false;}
+        }
+
+        this.tm++;if(this.tm>5){this.tm=0;this.fr^=1;}
+    },
+
+    box(){return this.duck?{x:this.x+2,y:this.y+2,w:28,h:20}:{x:this.x+4,y:this.y+4,w:24,h:34};},
+
+    draw(){
+        const x=this.x,y=this.y,f=this.faceR;
+        cx.fillStyle='#e94560';
+        if(this.duck){
+            cx.fillRect(x,y+4,36,12);
+            if(f){cx.fillRect(x+32,y,10,9);cx.fillStyle='#fff';cx.fillRect(x+37,y+2,3,3);}
+            else{cx.fillRect(x-2,y,10,9);cx.fillStyle='#fff';cx.fillRect(x+1,y+2,3,3);}
+            cx.fillStyle='#e94560';
+            cx.fillRect(x+(f?(this.fr?6:14):(this.fr?16:8)),y+16,7,8);
+            cx.fillRect(x+(f?(this.fr?18:24):(this.fr?8:18)),y+16,7,8);
+        }else{
+            cx.fillRect(x+4,y+10,22,20);
+            if(f){
+                cx.fillRect(x+14,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+30,y+3,5,5);cx.fillStyle='#e94560';
+                cx.fillRect(x+32,y+4,2,2);cx.fillRect(x+36,y+12,4,2);
+                cx.fillRect(x,y+10,6,4);cx.fillRect(x-2,y+7,4,5);
+                cx.fillRect(x+24,y+18,7,3);
+            }else{
+                cx.fillRect(x-4,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+2,y+3,5,5);cx.fillStyle='#e94560';
+                cx.fillRect(x+4,y+4,2,2);cx.fillRect(x-2,y+12,4,2);
+                cx.fillRect(x+22,y+10,6,4);cx.fillRect(x+26,y+7,4,5);
+                cx.fillRect(x+5,y+18,7,3);
+            }
+            if(this.gnd){
+                if(this.fr){cx.fillRect(x+6,y+30,6,10);cx.fillRect(x+18,y+30,6,10);}
+                else{cx.fillRect(x+10,y+30,6,10);cx.fillRect(x+14,y+30,6,10);}
+            }else{cx.fillRect(x+6,y+30,6,8);cx.fillRect(x+18,y+32,6,6);}
+        }
+    }
+};
+
+// 障碍物
+let obs=[];
+let sparkP=[];
+let warningX=null,warningTimer=0; // 掉落警告
+
+function spawnObs(){
+    const r=Math.random();
+
+    // 前方障碍（从屏幕边缘）
+    if(r<0.5){
+        const x=D.faceR?W+20:-40;
+        const types=['spike','tallSpike','doubleSpike'];
+        const t=types[Math.floor(Math.random()*types.length)];
+        let w,h;
+        switch(t){case'spike':w=14;h=28;break;case'tallSpike':w=16;h=40;break;case'doubleSpike':w=30;h=30;break;}
+        obs.push({x,dir:1,w,h,t,speed:0});
+    }
+    // 后方障碍
+    else if(r<0.75&&score>30){
+        const x=D.faceR?-40:W+20;
+        const types=['fireball','saw'];
+        const t=types[Math.floor(Math.random()*types.length)];
+        const y=GY-Math.random()*50-30;
+        obs.push({x,dir:-1,w:t==='fireball'?16:22,h:t==='fireball'?16:22,y,t,rot:0});
+    }
+    // 上方掉落（在恐龙头顶附近）
+    else{
+        const dropX=D.x+(Math.random()-0.5)*250;
+        const clampX=Math.max(30,Math.min(W-50,dropX));
+        const t=Math.random()<0.5?'drop':'bomb';
+        // 显示警告
+        warningX=clampX;
+        warningTimer=40;
+        // 延迟生成掉落物
+        setTimeout(()=>{
+            if(state==='run'){
+                obs.push({x:clampX,dir:0,w:18,h:18,t,vy:3+Math.random()*2,y:-30});
+            }
+        },400); // 0.4秒后掉落
+    }
+}
+
+function updObs(){
+    for(let i=obs.length-1;i>=0;i--){
+        const o=obs[i];
+        if(o.dir===1)o.x-=speed;
+        else if(o.dir===-1)o.x+=speed*0.9;
+        else{
+            o.y+=o.vy;
+            if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){
+                o.exploded=true;
+                spark(o.x+10,o.y+12,20);
+                // 爆炸范围伤害
+                if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){
+                    endGame();return;
+                }
+            }
+        }
+
+        if(o.t==='saw')o.rot=(o.rot||0)+0.3;
+
+        if(o.x<-80||o.x>W+80||o.y>H+40){obs.splice(i,1);continue;}
+        if(o.t==='bomb'&&o.exploded)continue;
+        if(hit(o)){endGame();return;}
+    }
+
+    if(warningTimer<=0)warningX=null;
+}
+
+function hit(o){
+    const b=D.box();
+    let ox,oy;
+    if(o.dir===1){ox=o.x;oy=GY-o.h;}
+    else if(o.dir===-1){ox=o.x;oy=o.y;}
+    else{ox=o.x;oy=o.y;}
+    const hitResult=b.x<ox+o.w-6&&b.x+b.w>ox+6&&b.y<oy+o.h-6&&b.y+b.h>oy+6;
+    if(hitResult){
+        hitCombo++;
+        if(hitCombo>=3)showTaunt('combo');
+    }
+    return hitResult;
+}
+
+function drawObs(){
+    obs.forEach(o=>{
+        let x=o.x,y;
+        if(o.dir===1)y=GY-o.h;
+        else if(o.dir===-1)y=o.y;
+        else y=o.y;
+
+        cx.fillStyle=o.dir===1?'#555':(o.dir===-1?'#ff6b35':'#ffd700');
+
+        switch(o.t){
+            case'spike':
+                cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y);cx.lineTo(x+14,GY);cx.fill();break;
+            case'tallSpike':
+                cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+8,y);cx.lineTo(x+16,GY);cx.fill();
+                cx.fillRect(x+3,y+8,10,4);break;
+            case'doubleSpike':
+                cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y+4);cx.lineTo(x+14,GY);cx.fill();
+                cx.beginPath();cx.moveTo(x+16,GY);cx.lineTo(x+23,y);cx.lineTo(x+30,GY);cx.fill();break;
+            case'fireball':
+                cx.fillRect(x,y,16,16);cx.fillStyle='#ffaa00';cx.fillRect(x+3,y+3,10,10);
+                cx.fillStyle=`rgba(255,100,50,${0.4+Math.random()*0.3})`;cx.fillRect(x+16,y+4,8,8);break;
+            case'saw':
+                cx.save();cx.translate(x+11,y+11);cx.rotate(o.rot||0);cx.fillStyle='#aaa';
+                for(let i=0;i<6;i++){cx.fillRect(-2,-10,4,4);cx.rotate(Math.PI/3);}
+                cx.fillStyle='#555';cx.beginPath();cx.arc(0,0,4,0,Math.PI*2);cx.fill();cx.restore();break;
+            case'drop':
+                cx.fillStyle='#ffd700';
+                cx.beginPath();cx.moveTo(x+9,y);cx.lineTo(x+18,y+18);cx.lineTo(x,y+18);cx.closePath();cx.fill();
+                cx.fillStyle='#ffaa00';cx.beginPath();cx.arc(x+9,y+13,3,0,Math.PI*2);cx.fill();break;
+            case'bomb':
+                cx.fillStyle='#333';cx.beginPath();cx.arc(x+10,y+14,10,0,Math.PI*2);cx.fill();
+                cx.fillStyle='#e94560';cx.fillRect(x+8,y,4,6);
+                cx.fillStyle='#ff6b35';cx.fillRect(x+6,y-2,8,3);break;
+        }
+    });
+
+    // 掉落警告
+    if(warningTimer>0&&warningX!==null){
+        // 警告区域闪烁
+        const alpha=(Math.sin(Date.now()/80)*0.3+0.4)*(warningTimer/50);
+        cx.fillStyle=`rgba(255,215,0,${alpha})`;
+        cx.fillRect(warningX-5,0,30,GY);
+        // 警告箭头
+        cx.fillStyle='#ffd700';
+        cx.beginPath();cx.moveTo(warningX+10,10);cx.lineTo(warningX+5,25);cx.lineTo(warningX+15,25);cx.closePath();cx.fill();
+        cx.font='12px monospace';cx.textAlign='center';
+        cx.fillText('⚠',warningX+10,40);
+        warningTimer--;
+    }
+}
+
+function spark(x,y,n){for(let i=0;i<n;i++)sparkP.push({x,y,vx:(Math.random()-0.5)*6,vy:-Math.random()*4-1,life:18+Math.random()*12,c:Math.random()>0.5?'#e94560':'#ff6b35'});}
+function updSpark(){for(let i=sparkP.length-1;i>=0;i--){const p=sparkP[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;if(p.life<=0)sparkP.splice(i,1);}}
+function drawSpark(){sparkP.forEach(p=>{cx.globalAlpha=p.life/30;cx.fillStyle=p.c;cx.fillRect(p.x,p.y,3,3);});cx.globalAlpha=1;}
+
+let gd=0;
+function drawGround(){
+    cx.strokeStyle='#444';cx.lineWidth=2;cx.beginPath();cx.moveTo(0,GY);cx.lineTo(W,GY);cx.stroke();
+    gd-=speed;if(gd<-20)gd+=20;cx.fillStyle='#555';for(let x=gd;x<W;x+=20)cx.fillRect(x,GY+4,12,2);
+}
+
+// HUD - 显示恐龙位置和速度
+function drawHUD(){
+    // 位置条
+    cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(10,8,120,18);cx.strokeStyle='#444';cx.strokeRect(10,8,120,18);
+    cx.fillStyle='#e94560';cx.fillRect(12,10,D.x/W*116,14);
+    cx.fillStyle='#888';cx.font='8px monospace';cx.textAlign='left';cx.fillText('位置',14,20);
+
+    // 速度显示
+    cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(W-110,8,100,18);
+    cx.fillStyle='#ff6b35';cx.font='10px monospace';cx.textAlign='right';
+    cx.fillText('速度: '+speed.toFixed(1),W-16,20);
+}
+
+function pad(n){return String(Math.floor(n)).padStart(5,'0');}
+
+let state='idle',score=0,speed=5,frame=0,hi=parseInt(localStorage.getItem('dh')||'0');
+let spawnT=0,spawnI=70;
+let keys={};
+let distance=0;
+document.getElementById('hi').textContent=pad(hi);
+
+function init(){D.reset();obs=[];sparkP=[];score=0;speed=5;frame=0;spawnT=0;spawnI=40;keys={};warningX=null;warningTimer=0;distance=0;idleTimer=0;hitCombo=0;document.getElementById('sc').textContent='00000';}
+
+function loop(){
+    requestAnimationFrame(loop);
+
+    // 持续移动
+    if(state==='run'){
+        if(keys['ArrowLeft']||keys['KeyA'])D.moveLeft();
+        else if(keys['ArrowRight']||keys['KeyD'])D.moveRight();
+        else D.stopMove();
+    }
+
+    cx.clearRect(0,0,W,H);
+    const g=cx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f0c29');g.addColorStop(1,'#16213e');cx.fillStyle=g;cx.fillRect(0,0,W,H);
+    drawGround();
+
+    if(state==='run'){
+        frame++;score+=0.2;document.getElementById('sc').textContent=pad(score);
+
+        // 速度随距离增加
+        distance+=speed;
+        if(speed<14)speed=5+distance*0.0001;
+
+        // 高速嘲讽
+        if(speed>10&&Math.random()<0.002)showTaunt('fast');
+
+        // 生成间隔随速度增加（更频繁）
+        spawnI=Math.max(20,50-Math.floor(speed*3));
+        spawnT++;
+        if(spawnT>=spawnI){
+            spawnT=0;
+            spawnObs();
+            // 高速时可能连续生成多个
+            if(speed>10&&Math.random()<0.3)spawnObs();
+        }
+        updObs();D.upd();updSpark();
+    }
+
+    drawObs();D.draw();drawSpark();
+    drawHUD();
+    drawTaunt();
+
+    // 空闲嘲讽
+    if(state==='idle'){
+        idleTimer++;
+        if(idleTimer>150&&idleTimer%150===0)showTaunt('idle');
+    }else{
+        idleTimer=0;
+    }
+
+    if(state==='idle'){
+        cx.fillStyle='#e94560';cx.font='16px monospace';cx.textAlign='center';
+        if(Math.floor(Date.now()/350)%2)cx.fillText('按 空格 开始',W/2,90);
+        cx.font='11px monospace';cx.fillStyle='#666';
+        cx.fillText('← → 移动 | 空格跳跃 | ↓蹲下',W/2,115);
+    }
+    if(state==='over'){
+        cx.fillStyle='#e94560';cx.font='bold 22px monospace';cx.textAlign='center';
+        cx.fillText('GAME OVER',W/2,80);
+        cx.font='14px monospace';
+        if(Math.floor(Date.now()/350)%2)cx.fillText('按 空格 重开',W/2,105);
+        cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),W/2,125);
+        cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(distance)+'m',W/2,145);
+    }
+}
+
+function startGame(){init();state='run';showTaunt('hit',Math.random()<0.5?'🎮 开始了！':'🏃 冲啊！');}
+function endGame(){state='over';D.vx=0;hitCombo=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
+
+let _sp=false;
+onkeydown=e=>{
+    keys[e.code]=true;
+    if((e.code==='Space'||e.code==='ArrowUp')&&!_sp){e.preventDefault();_sp=true;if(state==='run')D.jump();else startGame();}
+    if(e.code==='ArrowDown'){e.preventDefault();if(state==='run')D.setDuck(true);}
+};
+onkeyup=e=>{
+    keys[e.code]=false;
+    if(e.code==='Space'||e.code==='ArrowUp')_sp=false;
+    if(e.code==='ArrowDown')D.setDuck(false);
+};
+cv.onclick=()=>{if(state!=='run')startGame();};
+cv.ontouchstart=e=>{e.preventDefault();if(state==='run')D.jump();else startGame();};
+
+// ====== 手机触控支持 ======
+const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
+const tc=document.getElementById('tc');
+if(isMobile)tc.classList.add('show');
+
+// 绑定虚拟按钮 - 左右移动
+function bindBtn(id,downFn,upFn){
+    const el=document.getElementById(id);
+    el.addEventListener('touchstart',e=>{e.preventDefault();downFn();},{passive:false});
+    el.addEventListener('touchend',e=>{e.preventDefault();upFn();},{passive:false});
+    el.addEventListener('touchcancel',e=>{upFn();});
+}
+bindBtn('btnL',()=>D.moveLeft(),()=>D.stopMove());
+bindBtn('btnR',()=>D.moveRight(),()=>D.stopMove());
+bindBtn('btnD',()=>D.setDuck(true),()=>D.setDuck(false));
+
+// 跳跃 & 开始
+document.getElementById('btnJ').addEventListener('touchstart',e=>{
+    e.preventDefault();
+    if(state==='run')D.jump();else startGame();
+},{passive:false});
+document.getElementById('btnS').addEventListener('touchstart',e=>{
+    e.preventDefault();
+    if(state==='run')D.jump();else startGame();
+},{passive:false});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
