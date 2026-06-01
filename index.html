@@ -331,6 +331,7 @@ bindBtn('btnD',()=>D.setDuck(true),()=>D.setDuck(false));
 document.getElementById('btnJ').addEventListener('touchstart',e=>{e.preventDefault();if(state==='run')D.jump();else startGame();},{passive:false});
 document.getElementById('btnS').addEventListener('touchstart',e=>{e.preventDefault();if(state==='run')D.jump();else startGame();},{passive:false});
 
+console.log('Game loaded. Mobile:',isMobile,'Canvas:',cv.width,'x',cv.height);
 requestAnimationFrame(loop);
 </script>
 </body>
