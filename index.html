@@ -6,236 +6,238 @@
 <title>T-Rex Runner</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;background:#16213e;font-family:monospace;overflow:hidden;touch-action:none}
-body{display:flex;flex-direction:column;align-items:center;justify-content:center}
+html,body{width:100%;height:100%;background:#0f0c29;font-family:monospace;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:none}
 .hud{display:flex;justify-content:center;gap:20px;padding:4px 0;font-size:16px}
 .sc{font-weight:bold;color:#e94560}.hi{font-size:12px;color:#555;line-height:20px}
 canvas#c{display:block;touch-action:none}
 .info{color:#666;font-size:11px;padding:2px 0;text-align:center}.warn{color:#e94560}
 
 /* 竖屏提示 */
-.orient{display:none;position:fixed;inset:0;z-index:999;background:#16213e;color:#fff;font-size:18px;flex-direction:column;align-items:center;justify-content:center;gap:10px}
-.orient .ico{font-size:42px;animation:sp 1.5s ease-in-out infinite}
-@keyframes sp{50%{transform:rotate(90deg)}}
-@media(orientation:portrait)and (max-width:768px){
-  .orient.on{display:flex}
-  .hud,.info,#c,.joy-wrap{display:none!important}
-}
+.orient{display:none;position:fixed;inset:0;z-index:999;background:#0f0c29;color:#fff;font-size:18px;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.orient .ico{font-size:48px;animation:sp 1.2s ease-in-out infinite}
+@keyframes sp{0%,100%{transform:rotate(0deg)}50%{transform:rotate(90deg)}}
+.orient.on{display:flex}
 
-/* 摇盘容器 */
-.joy-wrap{display:none;position:fixed;bottom:0;left:0;width:50%;height:55%;z-index:100;touch-action:none;user-select:none;-webkit-user-select:none}
-.joy-wrap.on{display:block}
+/* 摇盘 */
+.joy{display:none;position:fixed;bottom:10px;left:10px;z-index:100;touch-action:none}
+.joy.on{display:block}
+.joy canvas{touch-action:none;display:block}
 
 /* 跳跃按钮 */
-.jump-btn{display:none;position:fixed;bottom:30px;right:30px;width:80px;height:80px;border-radius:50%;border:3px solid rgba(255,255,255,0.4);background:rgba(233,69,96,0.25);color:#fff;font-size:28px;font-weight:bold;z-index:100;touch-action:none;user-select:none;-webkit-user-select:none;display:flex;align-items:center;justify-content:center}
-.jump-btn.on{display:flex}
-.jump-btn:active,.jump-btn.pressed{background:rgba(233,69,96,0.7);border-color:#e94560}
+.jbtn{display:none;position:fixed;bottom:20px;right:20px;border-radius:50%;border:3px solid rgba(233,69,96,0.5);background:rgba(233,69,96,0.2);color:#fff;font-weight:bold;z-index:100;touch-action:none;display:flex;align-items:center;justify-content:center;transition:background 0.08s}
+.jbtn.on{display:flex}
+.jbtn.pressed{background:rgba(233,69,96,0.7);border-color:#e94560}
+
+@media(orientation:portrait) and (max-width:900px){
+  .orient.on~.hud,.orient.on~#c,.orient.on~.info,.orient.on~.joy,.orient.on~.jbtn{display:none!important}
+}
 </style>
 </head>
 <body>
-<div class="orient" id="orient"><div class="ico">📱↻</div><div>请旋转手机到横屏</div></div>
 
+<div class="orient" id="orient"><div class="ico">📱↻</div><div>请旋转手机到横屏</div></div>
 <div class="hud"><div class="sc" id="sc">00000</div><div class="hi">HI <span id="hi">00000</span></div></div>
 <canvas id="c"></canvas>
-<div class="info" id="infoBar"><span class="warn">←→</span>移动 <span class="warn">空格/↑</span>跳 <span class="warn">↓</span>蹲 躲避掉落物</div>
+<div class="info" id="infoBar"><span class="warn">←→</span>移动 <span class="warn">空格</span>跳 <span class="warn">↓</span>蹲</div>
 
-<!-- 左侧摇盘 -->
-<div class="joy-wrap" id="joyWrap">
-  <canvas id="joyC" width="300" height="300"></canvas>
-</div>
-<!-- 右侧跳跃 -->
-<div class="jump-btn" id="jumpBtn">JUMP</div>
+<div class="joy" id="joy"><canvas id="jc"></canvas></div>
+<div class="jbtn" id="jbtn">JUMP</div>
 
 <script>
-// ===== 核心常量 =====
-const cv=document.getElementById('c'),cx=cv.getContext('2d');
-const W=800,H=260,GY=210;
-const MOVE_SPEED=5;
-const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
+'use strict';
+
+// ===== 基础 =====
+const cv=document.getElementById('c'),cx=cv.getContext('2d',{alpha:false});
+const JW=800,JH=260,GY=210,MSPEED=5;
+const MOBILE='ontouchstart'in window||navigator.maxTouchPoints>0;
 
 // ===== 画布自适应 =====
-function resizeCanvas(){
-  const vh=window.innerHeight,vw=window.innerWidth;
-  const hudH=isMobile?24:30, infoH=isMobile?0:20, padH=isMobile?0:8;
-  const availH=vh-hudH-infoH-padH-(isMobile?0:16);
-  const availW=vw-(isMobile?0:32);
-  const ratio=W/H;
+function resize(){
+  const vw=innerWidth,vh=innerHeight;
+  const hudH=24,pad=MOBILE?80:0; // 手机底部留给摇盘/按钮
+  const availW=vw-(MOBILE?16:32), availVH=vh-hudH-(MOBILE?pad:30);
+  const ratio=JW/JH;
   let cw=Math.min(availW,800),ch=Math.floor(cw/ratio);
-  if(ch>availH){ch=availH;cw=Math.floor(ch*ratio);}
-  cv.width=W;cv.height=H;
+  if(ch>availVH){ch=availVH;cw=Math.floor(ch*ratio);}
+  cv.width=JW;cv.height=JH;
   cv.style.width=cw+'px';cv.style.height=ch+'px';
-  // 摇盘定位
-  if(isMobile){
-    const jw=document.getElementById('joyWrap');
-    jw.style.width=Math.floor(vw*0.45)+'px';
-    jw.style.height=Math.floor(vh*0.55)+'px';
-    jw.style.left='0';jw.style.bottom='0';
-    const jc=document.getElementById('joyC');
-    const js=Math.min(vw*0.4,vh*0.45);
-    jc.style.width=js+'px';jc.style.height=js+'px';
-    jc.width=300;jc.height=300;
+
+  if(MOBILE){
+    // 摇盘
+    const jsz=Math.min(vw*0.38,vh*0.38,160);
+    const jc=document.getElementById('jc');
+    jc.width=jsz*2;jc.height=jsz*2; // 2x 分辨率防模糊
+    jc.style.width=jsz+'px';jc.style.height=jsz+'px';
+    JOY_R=jsz*0.8;THUMB_R=jsz*0.3;JOY_CX=jsz;JOY_CY=jsz;
     // 跳跃按钮
-    const jb=document.getElementById('jumpBtn');
-    const bsz=Math.floor(Math.min(vw*0.18,vh*0.22));
+    const bsz=Math.floor(Math.min(vw*0.2,vh*0.25,100));
+    const jb=document.getElementById('jbtn');
     jb.style.width=bsz+'px';jb.style.height=bsz+'px';
-    jb.style.fontSize=Math.floor(bsz*0.35)+'px';
-    jb.style.right=Math.floor(vw*0.04)+'px';
-    jb.style.bottom=Math.floor(vh*0.15)+'px';
+    jb.style.fontSize=Math.floor(bsz*0.3)+'px';
   }
 }
-resizeCanvas();
-window.addEventListener('resize',resizeCanvas);
+resize();
+addEventListener('resize',resize);
 
 // ===== 横屏检测 =====
 const orientEl=document.getElementById('orient');
-function checkOri(){
-  if(!isMobile)return;
-  const ls=window.innerWidth>window.innerHeight;
+function chkOri(){
+  if(!MOBILE)return;
+  const ls=innerWidth>innerHeight;
   orientEl.classList.toggle('on',!ls);
+  // 尝试锁定横屏
+  if(ls&&screen.orientation&&screen.orientation.lock){
+    screen.orientation.lock('landscape').catch(()=>{});
+  }
 }
-checkOri();
-window.addEventListener('resize',checkOri);
-window.addEventListener('orientationchange',()=>setTimeout(checkOri,300));
+chkOri();
+addEventListener('resize',chkOri);
+addEventListener('orientationchange',()=>setTimeout(chkOri,200));
 
-// ===== 显示手机控件 =====
-if(isMobile){
-  document.getElementById('joyWrap').classList.add('on');
-  document.getElementById('jumpBtn').classList.add('on');
+// 显示手机控件
+if(MOBILE){
+  document.getElementById('joy').classList.add('on');
+  document.getElementById('jbtn').classList.add('on');
   document.getElementById('infoBar').style.display='none';
 }
 
-// ===== 摇盘系统 =====
-const joyState={dx:0,dy:0,active:false}; // dx: -1左 0停 1右, dy: -1上(跳) 0 1下(蹲)
-const joyCanvas=document.getElementById('joyC');
-const jxCx=joyCanvas.getContext('2d');
-const JOY_R=120, THUMB_R=40; // 摇盘半径，摇杆半径
-const JOY_CX=150,JOY_CY=150; // 中心点
-
-let joyTouchId=null; // 跟踪摇盘的触摸点ID
+// ===== 摇盘 =====
+let JOY_R=80,THUMB_R=24,JOY_CX=80,JOY_CY=80;
+const joyCanvas=document.getElementById('jc');
+const jctx=joyCanvas.getContext('2d');
+const joy={dx:0,dy:0,rawX:0,rawY:0,active:false};
+let joyPid=null;
 
 function drawJoy(){
-  jxCx.clearRect(0,0,300,300);
+  const s=joyCanvas.width/2; // 缩放因子（2x canvas）
+  jctx.clearRect(0,0,joyCanvas.width,joyCanvas.height);
+  jctx.save();jctx.scale(s/JOY_CX,s/JOY_CY); // 实际不需要，直接用原始坐标
+
   // 底盘
-  jxCx.beginPath();jxCx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2);
-  jxCx.fillStyle='rgba(255,255,255,0.08)';jxCx.fill();
-  jxCx.strokeStyle='rgba(255,255,255,0.25)';jxCx.lineWidth=2;jxCx.stroke();
-  // 十字指示
-  jxCx.fillStyle='rgba(255,255,255,0.15)';
-  jxCx.fillRect(JOY_CX-1.5,JOY_CY-JOY_R+10,3,JOY_R*2-20);
-  jxCx.fillRect(JOY_CX-JOY_R+10,JOY_CY-1.5,JOY_R*2-20,3);
-  // 摇杆
-  const tx=JOY_CX+joyState.dx*JOY_R*0.7;
-  const ty=JOY_CY+joyState.dy*JOY_R*0.7;
-  jxCx.beginPath();jxCx.arc(tx,ty,THUMB_R,0,Math.PI*2);
-  jxCx.fillStyle=joyState.active?'rgba(233,69,96,0.6)':'rgba(255,255,255,0.15)';
-  jxCx.fill();
-  jxCx.strokeStyle=joyState.active?'#e94560':'rgba(255,255,255,0.3)';
-  jxCx.lineWidth=2;jxCx.stroke();
-  // 方向文字
-  jxCx.fillStyle='rgba(255,255,255,0.3)';jxCx.font='14px monospace';jxCx.textAlign='center';
-  jxCx.fillText('◀',JOY_CX-JOY_R+20,JOY_CY+5);
-  jxCx.fillText('▶',JOY_CX+JOY_R-20,JOY_CY+5);
-  jxCx.fillText('▲',JOY_CX,JOY_CY-JOY_R+18);
-  jxCx.fillText('▼',JOY_CX,JOY_CY+JOY_R-10);
+  jctx.beginPath();jctx.arc(JOY_CX,JOY_CY,JOY_R,0,Math.PI*2);
+  jctx.fillStyle='rgba(255,255,255,0.06)';jctx.fill();
+  jctx.strokeStyle='rgba(255,255,255,0.2)';jctx.lineWidth=2;jctx.stroke();
+
+  // 十字线
+  jctx.strokeStyle='rgba(255,255,255,0.08)';jctx.lineWidth=1;
+  jctx.beginPath();jctx.moveTo(JOY_CX-JOY_R+10,JOY_CY);jctx.lineTo(JOY_CX+JOY_R-10,JOY_CY);jctx.stroke();
+  jctx.beginPath();jctx.moveTo(JOY_CX,JOY_CY-JOY_R+10);jctx.lineTo(JOY_CX,JOY_CY+JOY_R-10);jctx.stroke();
+
+  // 摇杆（平滑插值位置）
+  const tx=joy.rawX*JOY_R*0.75;
+  const ty=joy.rawY*JOY_R*0.75;
+  jctx.beginPath();jctx.arc(JOY_CX+tx,JOY_CY+ty,THUMB_R,0,Math.PI*2);
+  jctx.fillStyle=joy.active?'rgba(233,69,96,0.5)':'rgba(255,255,255,0.12)';
+  jctx.fill();
+  jctx.strokeStyle=joy.active?'#e94560':'rgba(255,255,255,0.25)';
+  jctx.lineWidth=2;jctx.stroke();
+
+  jctx.restore();
 }
 
-function handleJoyMove(clientX,clientY){
-  const rect=joyCanvas.getBoundingClientRect();
-  const sx=300/rect.width, sy=300/rect.height;
-  const px=(clientX-rect.left)*sx;
-  const py=(clientY-rect.top)*sy;
-  let dx=px-JOY_CX, dy=py-JOY_CY;
-  const dist=Math.sqrt(dx*dx+dy*dy);
-  // 限制在底盘内
-  if(dist>JOY_R){dx=dx/dist*JOY_R;dy=dy/dist*JOY_R;}
-  // 归一化到 -1~1
-  joyState.dx=dx/JOY_R;
-  joyState.dy=dy/JOY_R;
-  joyState.active=true;
-  // 阈值判断方向
-  const TH=0.35;
-  if(Math.abs(joyState.dx)<TH)joyState.dx=0;
-  else joyState.dx=joyState.dx>0?1:-1;
-  if(Math.abs(joyState.dy)<TH)joyState.dy=0;
-  else joyState.dy=joyState.dy>0?1:-1;
+function joyMove(cx2,cy2){
+  const r=joyCanvas.getBoundingClientRect();
+  const sx=joyCanvas.width/r.width,sy=joyCanvas.height/r.height;
+  let px=(cx2-r.left)*sx-JOY_CX, py=(cy2-r.top)*sy-JOY_CY;
+  const d=Math.sqrt(px*px+py*py);
+  if(d>JOY_R){px=px/d*JOY_R;py=py/d*JOY_R;}
+  joy.rawX=px/JOY_R;joy.rawY=py/JOY_R;joy.active=true;
+  // 死区 0.25
+  const TH=0.25;
+  joy.dx=Math.abs(joy.rawX)<TH?0:(joy.rawX>0?1:-1);
+  joy.dy=Math.abs(joy.rawY)<TH?0:(joy.rawY>0?1:-1);
 }
 
 joyCanvas.addEventListener('pointerdown',e=>{
   e.preventDefault();e.stopPropagation();
-  joyTouchId=e.pointerId;
-  joyCanvas.setPointerCapture(e.pointerId);
-  handleJoyMove(e.clientX,e.clientY);
+  joyPid=e.pointerId;joyCanvas.setPointerCapture(e.pointerId);
+  joyMove(e.clientX,e.clientY);
 });
 joyCanvas.addEventListener('pointermove',e=>{
-  if(e.pointerId!==joyTouchId)return;
-  e.preventDefault();
-  handleJoyMove(e.clientX,e.clientY);
+  if(e.pointerId!==joyPid)return;e.preventDefault();
+  joyMove(e.clientX,e.clientY);
 });
 joyCanvas.addEventListener('pointerup',e=>{
-  if(e.pointerId!==joyTouchId)return;
-  joyTouchId=null;joyState.dx=0;joyState.dy=0;joyState.active=false;
+  if(e.pointerId!==joyPid)return;
+  joyPid=null;joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;
 });
-joyCanvas.addEventListener('pointercancel',e=>{
-  joyTouchId=null;joyState.dx=0;joyState.dy=0;joyState.active=false;
+joyCanvas.addEventListener('pointercancel',()=>{
+  joyPid=null;joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;
 });
-// 防止摇盘上的触摸冒泡到全局
+
+// 防止摇盘区域触发全局手势
 joyCanvas.addEventListener('touchstart',e=>e.stopPropagation(),{passive:false});
 joyCanvas.addEventListener('touchmove',e=>e.stopPropagation(),{passive:false});
 
 drawJoy();
 
 // ===== 跳跃按钮 =====
-const jumpBtn=document.getElementById('jumpBtn');
-let jumpTouchId=null;
-jumpBtn.addEventListener('pointerdown',e=>{
+const jbtn=document.getElementById('jbtn');
+let jbtnPid=null;
+jbtn.addEventListener('pointerdown',e=>{
   e.preventDefault();e.stopPropagation();
-  jumpTouchId=e.pointerId;
-  jumpBtn.classList.add('pressed');
+  jbtnPid=e.pointerId;jbtn.classList.add('pressed');
   if(state==='run')D.jump();else startGame();
 });
-jumpBtn.addEventListener('pointerup',e=>{
-  if(e.pointerId!==jumpTouchId)return;
-  jumpTouchId=null;jumpBtn.classList.remove('pressed');
+jbtn.addEventListener('pointerup',e=>{
+  if(e.pointerId!==jbtnPid)return;
+  jbtnPid=null;jbtn.classList.remove('pressed');
 });
-jumpBtn.addEventListener('pointercancel',()=>{
-  jumpTouchId=null;jumpBtn.classList.remove('pressed');
-});
-jumpBtn.addEventListener('touchstart',e=>e.stopPropagation(),{passive:false});
+jbtn.addEventListener('pointercancel',()=>{jbtnPid=null;jbtn.classList.remove('pressed');});
+jbtn.addEventListener('touchstart',e=>e.stopPropagation(),{passive:false});
 
-// ===== 嘲讽系统 =====
+// 全局：手指全离开时清空状态
+addEventListener('touchend',e=>{
+  if(e.touches.length===0){joyPid=null;joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;}
+});
+addEventListener('touchcancel',e=>{
+  if(e.touches.length===0){joyPid=null;joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;}
+});
+
+// ===== 嘲讽 =====
 const taunts={
-  die:['💀 你死了！','🤡 又没了？','😤 太菜了！','🎯 瞄准点好吗','😂 笑死我了','🧠 反应速度负数','🦴 变成骨头了','👻 下次加油','🎮 手残党认证','💀 再来一次？'],
-  hit:['😱 好险！','😅 差一点','⚡ 电光火石','🙈 没看见！','🫣 这都能撞'],
-  idle:['😴 睡着了？','🦥 比乌龟还慢','🐢 动一下啊','⌛ 等你到明年'],
+  die:['💀 你死了！','🤡 又没了？','😤 太菜了！','😂 笑死我了','🧠 反应速度负数','👻 下次加油','🎮 手残党认证'],
+  hit:['😱 好险！','😅 差一点','⚡ 电光火石','🙈 没看见！'],
+  idle:['😴 睡着了？','🦥 比乌龟还慢','🐢 动一下啊'],
   doubleJump:['🦘 二段跳！','✨ 漂亮！','🔥 操作不错'],
   duck:['🦆 蹲下躲避','🥷 忍者蹲'],
-  fast:['🚀 速度不错！','💨 风一样的速度','⚡ 快如闪电'],
-  combo:['🔥 连续闪避！','💫 完美操作！','🎯 躲得漂亮！','⭐ 技术不错！']
+  fast:['🚀 速度不错！','💨 风一样的速度'],
+  combo:['🔥 连续闪避！','💫 完美操作！','⭐ 技术不错！']
 };
-let curTaunt='',tauntT=0,tauntC='#fff',hitCombo=0,lastTT=0,idleT=0;
-function showTaunt(t,custom){
-  const now=Date.now();if(now-lastTT<800)return;
-  curTaunt=custom||taunts[t][Math.floor(Math.random()*taunts[t].length)];
-  tauntT=80;tauntC=t==='die'?'#e94560':t==='hit'?'#ff6b35':t==='combo'?'#ffd700':'#fff';lastTT=now;
+let cTaunt='',tT=0,tC='#fff',hitC=0,lastTT=0,idleT=0;
+function showTaunt(t,c){
+  const n=Date.now();if(n-lastTT<800)return;
+  cTaunt=c||taunts[t][Math.floor(Math.random()*taunts[t].length)];
+  tT=80;tC=t==='die'?'#e94560':t==='hit'?'#ff6b35':t==='combo'?'#ffd700':'#fff';lastTT=n;
 }
 function drawTaunt(){
-  if(tauntT<=0)return;tauntT--;
-  cx.globalAlpha=Math.min(1,tauntT/20);cx.fillStyle=tauntC;cx.font='bold 16px monospace';cx.textAlign='center';
-  const s=tauntT>60?Math.random()*4-2:0;
-  cx.fillText(curTaunt,W/2+s,60+s);cx.fillStyle='rgba(0,0,0,0.3)';cx.fillText(curTaunt,W/2+s+2,62+s);cx.globalAlpha=1;
+  if(tT<=0)return;tT--;
+  cx.globalAlpha=Math.min(1,tT/20);cx.fillStyle=tC;cx.font='bold 16px monospace';cx.textAlign='center';
+  const s=tT>60?Math.random()*4-2:0;
+  cx.fillText(cTaunt,JW/2+s,60+s);cx.globalAlpha=1;
 }
 
 // ===== 恐龙 =====
 const D={
-  x:W/2-16,y:GY-40,w:32,h:40,vy:0,vx:0,gnd:true,dbl:true,duck:false,fr:0,tm:0,faceR:true,
-  reset(){this.x=W/2-16;this.y=GY-this.h;this.vy=0;this.vx=0;this.gnd=true;this.dbl=true;this.duck=false;this.h=40;this.faceR=true;},
-  jump(){if(this.gnd){this.vy=-14;this.gnd=false;this.dbl=true;}else if(this.dbl){this.vy=-12;this.dbl=false;spark(this.x+16,this.y+this.h,6);showTaunt('doubleJump');}},
-  setDuck(v){if(v&&this.gnd){this.duck=true;this.h=24;this.y=GY-24;showTaunt('duck');}else if(!v){this.duck=false;this.h=40;this.y=GY-40;}},
-  moveL(){this.vx=-MOVE_SPEED;this.faceR=false;},
-  moveR(){this.vx=MOVE_SPEED;this.faceR=true;},
+  x:JW/2-16,y:GY-40,w:32,h:40,vy:0,vx:0,gnd:true,dbl:true,duck:false,fr:0,tm:0,faceR:true,
+  prevDuck:false,
+  reset(){this.x=JW/2-16;this.y=GY-this.h;this.vy=0;this.vx=0;this.gnd=true;this.dbl=true;this.duck=false;this.h=40;this.faceR=true;this.prevDuck=false;},
+  jump(){
+    if(this.gnd){this.vy=-14;this.gnd=false;this.dbl=true;}
+    else if(this.dbl){this.vy=-12;this.dbl=false;spark(this.x+16,this.y+this.h,6);showTaunt('doubleJump');}
+  },
+  setDuck(v){
+    if(v===this.prevDuck)return; // 状态没变就跳过
+    this.prevDuck=v;
+    if(v&&this.gnd){this.duck=true;this.h=24;this.y=GY-24;}
+    else if(!v){this.duck=false;this.h=40;this.y=GY-40;}
+  },
+  moveL(){this.vx=-MSPEED;this.faceR=false;},
+  moveR(){this.vx=MSPEED;this.faceR=true;},
   stopM(){this.vx=0;},
   upd(){
-    this.x+=this.vx;if(this.x<0)this.x=0;if(this.x>W-this.w)this.x=W-this.w;
+    this.x+=this.vx;if(this.x<0)this.x=0;if(this.x>JW-this.w)this.x=JW-this.w;
     if(!this.gnd){this.vy+=0.6;this.y+=this.vy;if(this.y>=GY-this.h){this.y=GY-this.h;this.vy=0;this.gnd=true;this.dbl=false;}}
     this.tm++;if(this.tm>5){this.tm=0;this.fr^=1;}
   },
@@ -246,7 +248,9 @@ const D={
       cx.fillRect(x,y+4,36,12);
       if(f){cx.fillRect(x+32,y,10,9);cx.fillStyle='#fff';cx.fillRect(x+37,y+2,3,3);}
       else{cx.fillRect(x-2,y,10,9);cx.fillStyle='#fff';cx.fillRect(x+1,y+2,3,3);}
-      cx.fillStyle='#e94560';cx.fillRect(x+(f?(this.fr?6:14):(this.fr?16:8)),y+16,7,8);cx.fillRect(x+(f?(this.fr?18:24):(this.fr?8:18)),y+16,7,8);
+      cx.fillStyle='#e94560';
+      cx.fillRect(x+(f?(this.fr?6:14):(this.fr?16:8)),y+16,7,8);
+      cx.fillRect(x+(f?(this.fr?18:24):(this.fr?8:18)),y+16,7,8);
     }else{
       cx.fillRect(x+4,y+10,22,20);
       if(f){cx.fillRect(x+14,y,22,15);cx.fillStyle='#fff';cx.fillRect(x+30,y+3,5,5);cx.fillStyle='#e94560';cx.fillRect(x+32,y+4,2,2);cx.fillRect(x+36,y+12,4,2);cx.fillRect(x,y+10,6,4);cx.fillRect(x-2,y+7,4,5);cx.fillRect(x+24,y+18,7,3);}
@@ -262,16 +266,16 @@ let obs=[],sparkP=[],warnX=null,warnT=0;
 function spawnObs(){
   const r=Math.random();
   if(r<0.5){
-    const x=D.faceR?W+20:-40;const ts=['spike','tallSpike','doubleSpike'];const t=ts[Math.floor(Math.random()*3)];
+    const x=D.faceR?JW+20:-40;const ts=['spike','tallSpike','doubleSpike'];const t=ts[Math.floor(Math.random()*3)];
     let w,h;switch(t){case'spike':w=14;h=28;break;case'tallSpike':w=16;h=40;break;default:w=30;h=30;}
     obs.push({x,dir:1,w,h,t});
   }else if(r<0.75&&score>30){
-    const x=D.faceR?-40:W+20;const ts=['fireball','saw'];const t=ts[Math.floor(Math.random()*2)];
+    const x=D.faceR?-40:JW+20;const ts=['fireball','saw'];const t=ts[Math.floor(Math.random()*2)];
     obs.push({x,dir:-1,w:t==='fireball'?16:22,h:t==='fireball'?16:22,y:GY-Math.random()*50-30,t,rot:0});
   }else{
-    const cx2=Math.max(30,Math.min(W-50,D.x+(Math.random()-0.5)*250));
-    const t=Math.random()<0.5?'drop':'bomb';warnX=cx2;warnT=40;
-    setTimeout(()=>{if(state==='run')obs.push({x:cx2,dir:0,w:18,h:18,t,vy:3+Math.random()*2,y:-30});},400);
+    const dropX=Math.max(30,Math.min(JW-50,D.x+(Math.random()-0.5)*250));
+    const t=Math.random()<0.5?'drop':'bomb';warnX=dropX;warnT=40;
+    setTimeout(()=>{if(state==='run')obs.push({x:dropX,dir:0,w:18,h:18,t,vy:3+Math.random()*2,y:-30});},400);
   }
 }
 function updObs(){
@@ -280,80 +284,86 @@ function updObs(){
     if(o.dir===1)o.x-=speed;else if(o.dir===-1)o.x+=speed*0.9;
     else{o.y+=o.vy;if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){o.exploded=true;spark(o.x+10,o.y+12,20);if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){endGame();return;}}}
     if(o.t==='saw')o.rot=(o.rot||0)+0.3;
-    if(o.x<-80||o.x>W+80||o.y>H+40){obs.splice(i,1);continue;}
+    if(o.x<-80||o.x>JW+80||o.y>JH+40){obs.splice(i,1);continue;}
     if(o.t==='bomb'&&o.exploded)continue;
     if(hitBox(o)){endGame();return;}
   }
   if(warnT<=0)warnX=null;
 }
 function hitBox(o){
-  const b=D.box();let ox,oy;
-  if(o.dir===1){ox=o.x;oy=GY-o.h;}else{ox=o.x;oy=o.y;}
+  const b=D.box();let ox=o.x,oy=o.dir===1?GY-o.h:o.y;
   const r=b.x<ox+o.w-6&&b.x+b.w>ox+6&&b.y<oy+o.h-6&&b.y+b.h>oy+6;
-  if(r){hitCombo++;if(hitCombo>=3)showTaunt('combo');}return r;
+  if(r){hitC++;if(hitC>=3)showTaunt('combo');}return r;
 }
 function drawObs(){
   obs.forEach(o=>{
-    let x=o.x,y;if(o.dir===1)y=GY-o.h;else y=o.y;
+    let x=o.x,y=o.dir===1?GY-o.h:o.y;
     cx.fillStyle=o.dir===1?'#555':o.dir===-1?'#ff6b35':'#ffd700';
     switch(o.t){
       case'spike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y);cx.lineTo(x+14,GY);cx.fill();break;
       case'tallSpike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+8,y);cx.lineTo(x+16,GY);cx.fill();cx.fillRect(x+3,y+8,10,4);break;
       case'doubleSpike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y+4);cx.lineTo(x+14,GY);cx.fill();cx.beginPath();cx.moveTo(x+16,GY);cx.lineTo(x+23,y);cx.lineTo(x+30,GY);cx.fill();break;
-      case'fireball':cx.fillRect(x,y,16,16);cx.fillStyle='#ffaa00';cx.fillRect(x+3,y+3,10,10);cx.fillStyle=`rgba(255,100,50,${0.4+Math.random()*0.3})`;cx.fillRect(x+16,y+4,8,8);break;
-      case'saw':cx.save();cx.translate(x+11,y+11);cx.rotate(o.rot||0);cx.fillStyle='#aaa';for(let i=0;i<6;i++){cx.fillRect(-2,-10,4,4);cx.rotate(Math.PI/3);}cx.fillStyle='#555';cx.beginPath();cx.arc(0,0,4,0,Math.PI*2);cx.fill();cx.restore();break;
-      case'drop':cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(x+9,y);cx.lineTo(x+18,y+18);cx.lineTo(x,y+18);cx.closePath();cx.fill();cx.fillStyle='#ffaa00';cx.beginPath();cx.arc(x+9,y+13,3,0,Math.PI*2);cx.fill();break;
+      case'fireball':cx.fillRect(x,y,16,16);cx.fillStyle='#ffaa00';cx.fillRect(x+3,y+3,10,10);break;
+      case'saw':cx.save();cx.translate(x+11,y+11);cx.rotate(o.rot||0);cx.fillStyle='#aaa';for(let j=0;j<6;j++){cx.fillRect(-2,-10,4,4);cx.rotate(Math.PI/3);}cx.fillStyle='#555';cx.beginPath();cx.arc(0,0,4,0,Math.PI*2);cx.fill();cx.restore();break;
+      case'drop':cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(x+9,y);cx.lineTo(x+18,y+18);cx.lineTo(x,y+18);cx.closePath();cx.fill();break;
       case'bomb':cx.fillStyle='#333';cx.beginPath();cx.arc(x+10,y+14,10,0,Math.PI*2);cx.fill();cx.fillStyle='#e94560';cx.fillRect(x+8,y,4,6);cx.fillStyle='#ff6b35';cx.fillRect(x+6,y-2,8,3);break;
     }
   });
   if(warnT>0&&warnX!==null){
-    cx.fillStyle=`rgba(255,215,0,${(Math.sin(Date.now()/80)*0.3+0.4)*(warnT/50)})`;cx.fillRect(warnX-5,0,30,GY);
+    cx.fillStyle=`rgba(255,215,0,${(Math.sin(Date.now()/80)*0.3+0.4)*(warnT/50)})`;
+    cx.fillRect(warnX-5,0,30,GY);
     cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(warnX+10,10);cx.lineTo(warnX+5,25);cx.lineTo(warnX+15,25);cx.closePath();cx.fill();
     cx.font='12px monospace';cx.textAlign='center';cx.fillText('⚠',warnX+10,40);warnT--;
   }
 }
 function spark(x,y,n){for(let i=0;i<n;i++)sparkP.push({x,y,vx:(Math.random()-0.5)*6,vy:-Math.random()*4-1,life:18+Math.random()*12,c:Math.random()>0.5?'#e94560':'#ff6b35'});}
-function updSpark(){for(let i=sparkP.length-1;i>=0;i--){const p=sparkP[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life--;if(p.life<=0)sparkP.splice(i,1);}}
+function updSpark(){for(let i=sparkP.length-1;i>=0;i--){const p=sparkP[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;if(--p.life<=0)sparkP.splice(i,1);}}
 function drawSpark(){sparkP.forEach(p=>{cx.globalAlpha=p.life/30;cx.fillStyle=p.c;cx.fillRect(p.x,p.y,3,3);});cx.globalAlpha=1;}
 
 let gd=0;
-function drawGround(){cx.strokeStyle='#444';cx.lineWidth=2;cx.beginPath();cx.moveTo(0,GY);cx.lineTo(W,GY);cx.stroke();gd-=speed;if(gd<-20)gd+=20;cx.fillStyle='#555';for(let x=gd;x<W;x+=20)cx.fillRect(x,GY+4,12,2);}
+function drawGround(){cx.strokeStyle='#444';cx.lineWidth=2;cx.beginPath();cx.moveTo(0,GY);cx.lineTo(JW,GY);cx.stroke();gd-=speed;if(gd<-20)gd+=20;cx.fillStyle='#555';for(let x=gd;x<JW;x+=20)cx.fillRect(x,GY+4,12,2);}
 function drawHUD(){
   cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(10,8,120,18);cx.strokeStyle='#444';cx.strokeRect(10,8,120,18);
-  cx.fillStyle='#e94560';cx.fillRect(12,10,D.x/W*116,14);cx.fillStyle='#888';cx.font='8px monospace';cx.textAlign='left';cx.fillText('位置',14,20);
-  cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(W-110,8,100,18);cx.fillStyle='#ff6b35';cx.font='10px monospace';cx.textAlign='right';cx.fillText('速度: '+speed.toFixed(1),W-16,20);
+  cx.fillStyle='#e94560';cx.fillRect(12,10,D.x/JW*116,14);cx.fillStyle='#888';cx.font='8px monospace';cx.textAlign='left';cx.fillText('位置',14,20);
+  cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(JW-110,8,100,18);cx.fillStyle='#ff6b35';cx.font='10px monospace';cx.textAlign='right';cx.fillText('速度: '+speed.toFixed(1),JW-16,20);
 }
 function pad(n){return String(Math.floor(n)).padStart(5,'0');}
 
 // ===== 游戏状态 =====
 let state='idle',score=0,speed=5,hi=parseInt(localStorage.getItem('dh')||'0');
-let spawnT=0,spawnI=70,keys={},distance=0,lastTime=0;
+let spawnT=0,spawnI=70,keys={},dist=0,lastTS=0;
 document.getElementById('hi').textContent=pad(hi);
 
-function init(){D.reset();obs=[];sparkP=[];score=0;speed=5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;distance=0;idleT=0;hitCombo=0;lastTime=0;document.getElementById('sc').textContent='00000';}
+function init(){D.reset();obs=[];sparkP=[];score=0;speed=5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;dist=0;idleT=0;hitC=0;lastTS=0;document.getElementById('sc').textContent='00000';}
 
+// ===== 单一动画循环（核心优化）=====
 function loop(ts){
   requestAnimationFrame(loop);
-  if(!lastTime)lastTime=ts;
-  const dt=Math.min((ts-lastTime)/16.67,3);lastTime=ts;
+  if(!lastTS)lastTS=ts;
+  const rawDt=(ts-lastTS)/16.67;
+  const dt=Math.min(rawDt>0?rawDt:1,3); // 防止 dt=0 或负数
+  lastTS=ts;
 
-  // 摇盘 → 移动
+  // 摇盘/键盘 → 输入
   if(state==='run'){
-    if(joyState.dx<0||keys['ArrowLeft']||keys['KeyA'])D.moveL();
-    else if(joyState.dx>0||keys['ArrowRight']||keys['KeyD'])D.moveR();
+    if(joy.dx<0||keys.ArrowLeft||keys.KeyA)D.moveL();
+    else if(joy.dx>0||keys.ArrowRight||keys.KeyD)D.moveR();
     else D.stopM();
-    // 摇盘向上=跳, 向下=蹲
-    if(joyState.dy<0){D.jump();joyState.dy=0;} // 跳是触发式的，立刻归零
-    if(joyState.dy>0)D.setDuck(true);else if(state==='run')D.setDuck(false);
+    // 摇盘上推=跳（触发式，推一次跳一次）
+    if(joy.dy<0){D.jump();joy.dy=0;}
+    // 摇盘下推=蹲（持续按住）
+    D.setDuck(joy.dy>0);
   }
 
-  cx.clearRect(0,0,W,H);
-  const g=cx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0f0c29');g.addColorStop(1,'#16213e');cx.fillStyle=g;cx.fillRect(0,0,W,H);
+  // --- 渲染 ---
+  cx.clearRect(0,0,JW,JH);
+  // 背景渐变（只在 resize 时重建更高效，但这里简单处理）
+  cx.fillStyle='#0f0c29';cx.fillRect(0,0,JW,JH);
   drawGround();
 
   if(state==='run'){
     score+=0.2*dt;document.getElementById('sc').textContent=pad(score);
-    distance+=speed*dt;if(speed<14)speed=5+distance*0.0001;
+    dist+=speed*dt;if(speed<14)speed=5+dist*0.0001;
     if(speed>10&&Math.random()<0.002*dt)showTaunt('fast');
     spawnI=Math.max(20,50-Math.floor(speed*3));spawnT+=dt;
     if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
@@ -365,34 +375,39 @@ function loop(ts){
   if(state==='idle'){
     idleT++;if(idleT>150&&idleT%150===0)showTaunt('idle');
     cx.fillStyle='#e94560';cx.font='16px monospace';cx.textAlign='center';
-    if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'👇 点 JUMP 开始':'按 空格 开始',W/2,90);
+    if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 开始':'按 空格 开始',JW/2,90);
     cx.font='11px monospace';cx.fillStyle='#666';
-    cx.fillText(isMobile?'摇盘移动 | 右侧跳跃':'← → 移动 | 空格跳跃 | ↓蹲下',W/2,115);
+    cx.fillText(MOBILE?'摇盘移动 | 右侧跳跃':'← → 移动 | 空格跳跃 | ↓蹲',JW/2,115);
   }else{idleT=0;}
 
   if(state==='over'){
     cx.fillStyle='#e94560';cx.font='bold 22px monospace';cx.textAlign='center';
-    cx.fillText('GAME OVER',W/2,80);cx.font='14px monospace';
-    if(Math.floor(Date.now()/350)%2)cx.fillText(isMobile?'👇 点 JUMP 重开':'按 空格 重开',W/2,105);
-    cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),W/2,125);
-    cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(distance)+'m',W/2,145);
+    cx.fillText('GAME OVER',JW/2,80);cx.font='14px monospace';
+    if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 重开':'按 空格 重开',JW/2,105);
+    cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),JW/2,125);
+    cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(dist)+'m',JW/2,145);
   }
+
+  // 摇盘在同一个循环里绘制（不用第二个 rAF）
+  if(MOBILE&&joy.active)drawJoy();
 }
 
 function startGame(){init();state='run';showTaunt('hit',Math.random()<0.5?'🎮 开始了！':'🏃 冲啊！');}
-function endGame(){state='over';D.vx=0;hitCombo=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
+function endGame(){state='over';D.vx=0;hitC=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
 
 // ===== 键盘 =====
 let _sp=false;
-onkeydown=e=>{keys[e.code]=true;if((e.code==='Space'||e.code==='ArrowUp')&&!_sp){e.preventDefault();_sp=true;if(state==='run')D.jump();else startGame();}if(e.code==='ArrowDown'){e.preventDefault();if(state==='run')D.setDuck(true);}};
+onkeydown=e=>{
+  keys[e.code]=true;
+  if((e.code==='Space'||e.code==='ArrowUp')&&!_sp){e.preventDefault();_sp=true;if(state==='run')D.jump();else startGame();}
+  if(e.code==='ArrowDown'){e.preventDefault();if(state==='run')D.setDuck(true);}
+};
 onkeyup=e=>{keys[e.code]=false;if(e.code==='Space'||e.code==='ArrowUp')_sp=false;if(e.code==='ArrowDown')D.setDuck(false);};
 
-// canvas 点击（桌面端）
 cv.addEventListener('click',()=>{if(state!=='run')startGame();});
 
-// 摇盘绘制循环
-function joyLoop(){drawJoy();requestAnimationFrame(joyLoop);}
-if(isMobile)requestAnimationFrame(joyLoop);
+// 防止全局触摸手势
+document.addEventListener('touchmove',e=>{if(e.target===cv||e.target===joyCanvas)e.preventDefault();},{passive:false});
 
 requestAnimationFrame(loop);
 </script>
