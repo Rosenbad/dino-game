@@ -268,7 +268,8 @@ function spawnObs(){
 function updObs(){for(let i=obs.length-1;i>=0;i--){const o=obs[i];if(o.dir===1)o.x-=speed;else if(o.dir===-1)o.x+=speed*0.9;else{o.y+=o.vy;if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){o.exploded=true;spark(o.x+10,o.y+12,20);if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');}else{endGame();return;}}}if(o.t==='saw')o.rot=(o.rot||0)+0.3;if(o.x<-80||o.x>JW+80||o.y>JH+40){obs.splice(i,1);continue;}if(o.t==='bomb'&&o.exploded)continue;if(hitBox(o)){endGame();return;}}if(warnT<=0)warnX=null;}}
 function hitBox(o){
   const b=D.box();let ox=o.x,oy=o.dir===1?GY-o.h:o.y;
-  const r=b.x<ox+o.w-6&&b.x+b.w>ox+6&&b.y<oy+o.h-6&&b.y+b.h>oy+6;
+  // 缩小2像素让判定合理，不再缩小6像素
+  const r=b.x<ox+o.w-2&&b.x+b.w>ox+2&&b.y<oy+o.h-2&&b.y+b.h>oy+2;
   if(r){
     if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');return false;}
     hitC++;if(hitC>=3)showTaunt('combo');
