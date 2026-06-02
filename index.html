@@ -45,6 +45,11 @@ canvas#c{display:block;touch-action:none}
 <div class="jbtn" id="jbtn">JUMP</div>
 
 <script>
+// 错误捕获：显示在屏幕上
+window.onerror=function(m,s,l,c,e){
+  document.body.innerHTML='<pre style="color:red;padding:20px;font-size:14px;white-space:pre-wrap">ERROR: '+m+'\nLine: '+l+' Col: '+c+'\n'+(e&&e.stack?e.stack.split('\n').slice(0,3).join('\n'):'')+'</pre>';
+  return true;
+};
 'use strict';
 
 // ===== 基础 =====
