@@ -272,6 +272,65 @@ function spark(x,y,n){for(let i=0;i<n;i++)sparkP.push({x,y,vx:(Math.random()-0.5
 function updSpark(){for(let i=sparkP.length-1;i>=0;i--){const p=sparkP[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;if(--p.life<=0)sparkP.splice(i,1);}}
 function drawSpark(){sparkP.forEach(p=>{cx.globalAlpha=p.life/30;cx.fillStyle=p.c;cx.fillRect(p.x,p.y,3,3);});cx.globalAlpha=1;}
 let gd=0;
+
+// ===== 背景视差动画 =====
+// 星星
+const stars=[];for(let i=0;i<40;i++)stars.push({x:Math.random()*JW,y:Math.random()*GY*0.6,s:Math.random()*1.5+0.5,b:Math.random()});
+// 远山
+const mts=[];{let mx=0;while(mx<JW+100){const mw=60+Math.random()*80;const mh=30+Math.random()*50;mts.push({x:mx,w:mw,h:mh});mx+=mw-10+Math.random()*20;}}
+// 云
+const clouds=[];for(let i=0;i<5;i++)clouds.push({x:Math.random()*JW*1.5,y:10+Math.random()*60,w:40+Math.random()*50,h:12+Math.random()*10,s:0.15+Math.random()*0.2});
+
+let bgScroll1=0,bgScroll2=0,bgScroll3=0;
+function drawBG(dt){
+  // 星星（不滚动，闪烁）
+  cx.fillStyle='#fff';
+  stars.forEach(s=>{
+    const flicker=0.4+Math.sin(Date.now()*0.003+s.b*10)*0.3+s.b*0.3;
+    cx.globalAlpha=flicker;
+    cx.fillRect(s.x,s.y,s.s,s.s);
+  });
+  cx.globalAlpha=1;
+
+  // 远山（最慢，速度的 0.15 倍）
+  bgScroll1+=speed*dt*0.15;
+  cx.fillStyle='#1a1a3a';
+  mts.forEach(m=>{
+    const mx=((m.x-bgScroll1)%(JW+200)+JW+200)%(JW+200)-100;
+    cx.beginPath();cx.moveTo(mx,GY);cx.lineTo(mx+m.w*0.3,GY-m.h);cx.lineTo(mx+m.w*0.6,GY-m.h*0.7);cx.lineTo(mx+m.w,GY);cx.closePath();cx.fill();
+  });
+
+  // 远山轮廓线
+  cx.strokeStyle='#252550';cx.lineWidth=1;
+  cx.beginPath();
+  let started=false;
+  mts.forEach(m=>{
+    const mx=((m.x-bgScroll1)%(JW+200)+JW+200)%(JW+200)-100;
+    if(!started){cx.moveTo(mx,GY);started=true;}
+    cx.lineTo(mx+m.w*0.3,GY-m.h);cx.lineTo(mx+m.w*0.6,GY-m.h*0.7);cx.lineTo(mx+m.w,GY);
+  });
+  cx.stroke();
+
+  // 近山（中速，速度的 0.3 倍）
+  bgScroll2+=speed*dt*0.3;
+  cx.fillStyle='#12122a';
+  for(let i=0;i<6;i++){
+    const bx=((i*180-bgScroll2)%(JW+360)+JW+360)%(JW+360)-180;
+    const bh=20+((i*37)%40);
+    cx.beginPath();cx.moveTo(bx,GY);cx.lineTo(bx+40,GY-bh);cx.lineTo(bx+80,GY-bh*0.6);cx.lineTo(bx+120,GY);cx.closePath();cx.fill();
+  }
+
+  // 云（慢速飘动）
+  bgScroll3+=dt*clouds[0].s*0.5;
+  cx.fillStyle='rgba(255,255,255,0.04)';
+  clouds.forEach(c=>{
+    const cx2=((c.x-bgScroll3*c.s)%(JW+c.w+100)+JW+c.w+100)%(JW+c.w+100)-c.w-50;
+    cx.beginPath();cx.ellipse(cx2,c.y,c.w/2,c.h/2,0,0,Math.PI*2);cx.fill();
+    cx.beginPath();cx.ellipse(cx2-c.w*0.3,c.y+3,c.w*0.35,c.h*0.4,0,0,Math.PI*2);cx.fill();
+    cx.beginPath();cx.ellipse(cx2+c.w*0.3,c.y+2,c.w*0.3,c.h*0.35,0,0,Math.PI*2);cx.fill();
+  });
+}
+
 function drawGround(){cx.strokeStyle='#444';cx.lineWidth=2;cx.beginPath();cx.moveTo(0,GY);cx.lineTo(JW,GY);cx.stroke();gd-=speed;if(gd<-20)gd+=20;cx.fillStyle='#555';for(let x=gd;x<JW;x+=20)cx.fillRect(x,GY+4,12,2);}
 function drawHUD(){cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(10,8,120,18);cx.strokeStyle='#444';cx.strokeRect(10,8,120,18);cx.fillStyle='#e94560';cx.fillRect(12,10,D.x/JW*116,14);cx.fillStyle='#888';cx.font='8px monospace';cx.textAlign='left';cx.fillText('位置',14,20);cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(JW-110,8,100,18);cx.fillStyle='#ff6b35';cx.font='10px monospace';cx.textAlign='right';cx.fillText('速度: '+speed.toFixed(1),JW-16,20);}
 function pad(n){return String(Math.floor(n)).padStart(5,'0');}
@@ -298,6 +357,7 @@ function loop(ts){
 
   cx.clearRect(0,0,JW,JH);
   cx.fillStyle='#0f0c29';cx.fillRect(0,0,JW,JH);
+  drawBG(dt);
   drawGround();
   if(state==='run'){
     score+=0.2*dt;document.getElementById('sc').textContent=pad(score);
