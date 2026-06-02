@@ -266,12 +266,29 @@ function spawnObs(){
   else{const dx=Math.max(30,Math.min(JW-50,D.x+(Math.random()-0.5)*250));const t=Math.random()<0.5?'drop':'bomb';warnX=dx;warnT=40;setTimeout(()=>{if(state==='run')obs.push({x:dx,dir:0,w:18,h:18,t,vy:3+Math.random()*2,y:-30});},400);}
 }
 function updObs(){for(let i=obs.length-1;i>=0;i--){const o=obs[i];if(o.dir===1)o.x-=speed;else if(o.dir===-1)o.x+=speed*0.9;else{o.y+=o.vy;if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){o.exploded=true;spark(o.x+10,o.y+12,20);if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');}else{endGame();return;}}}if(o.t==='saw')o.rot=(o.rot||0)+0.3;if(o.x<-80||o.x>JW+80||o.y>JH+40){obs.splice(i,1);continue;}if(o.t==='bomb'&&o.exploded)continue;if(hitBox(o)){endGame();return;}}if(warnT<=0)warnX=null;}}
+let flashTimer=0,flashColor='red';
+function drawFlash(){
+  if(flashTimer>0){
+    cx.fillStyle=flashColor;
+    cx.globalAlpha=flashTimer/20*0.4;
+    cx.fillRect(0,0,JW,JH);
+    cx.globalAlpha=1;
+    flashTimer--;
+  }
+}
+
 function hitBox(o){
   const b=D.box();let ox=o.x,oy=o.dir===1?GY-o.h:o.y;
-  // 缩小2像素让判定合理，不再缩小6像素
   const r=b.x<ox+o.w-2&&b.x+b.w>ox+2&&b.y<oy+o.h-2&&b.y+b.h>oy+2;
   if(r){
-    if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');return false;}
+    if(shieldActive){
+      shieldActive=false;shieldTimer=0;
+      spark(D.x+16,D.y+20,15);
+      flashTimer=20;flashColor='rgba(0,150,255,1)'; // 盾牌碎裂闪蓝
+      showTaunt('hit','🛡️ 护盾碎裂！');
+      return false;
+    }
+    flashTimer=15;flashColor='red'; // 碰撞闪红
     hitC++;if(hitC>=3)showTaunt('combo');
   }
   return r;
@@ -540,7 +557,7 @@ function loop(ts){
     if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
     updObs();D.upd();updSpark();updMonsters(dt);updPowerups(dt);
   }
-  drawMonsters();drawObs();D.draw();drawSpark();drawPowerups();drawHUD();drawTaunt();
+  drawMonsters();drawObs();D.draw();drawSpark();drawPowerups();drawHUD();drawTaunt();drawFlash();
   if(state==='idle'){idleT++;if(idleT>150&&idleT%150===0)showTaunt('idle');cx.fillStyle='#e94560';cx.font='16px monospace';cx.textAlign='center';if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 开始':'按 空格 开始',JW/2,90);cx.font='11px monospace';cx.fillStyle='#666';cx.fillText(MOBILE?'摇盘移动 | JUMP跳跃':'← → 移动 | 空格跳跃 | ↓蹲',JW/2,115);}else idleT=0;
   if(state==='over'){cx.fillStyle='#e94560';cx.font='bold 22px monospace';cx.textAlign='center';cx.fillText('GAME OVER',JW/2,80);cx.font='14px monospace';if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 重开':'按 空格 重开',JW/2,105);cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),JW/2,125);cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(dist)+'m',JW/2,145);}
   if(MOBILE)drawJoy();
