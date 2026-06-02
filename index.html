@@ -57,15 +57,15 @@ function resize(){
   const ratio=JW/JH;
   if(MOBILE){
     // 手机横屏：上方游戏画面，下方左右各放控件
-    const ctrlH=vh*0.35; // 控件区占 35%
-    const gameH=vh-ctrlH-24;
+    const ctrlH=vh*0.28; // 控件区占 28%（更紧凑）
+    const gameH=vh-ctrlH-16;
     let cw=Math.min(vw,JW),ch=Math.floor(cw/ratio);
     if(ch>gameH){ch=gameH;cw=Math.floor(ch*ratio);}
     cv.width=JW;cv.height=JH;
     cv.style.width=cw+'px';cv.style.height=ch+'px';
-    cv.style.marginTop='4px';
+    cv.style.marginTop='2px';
     // 摇盘：左下
-    const jsz=Math.floor(Math.min(vw*0.4,ctrlH*0.85,160));
+    const jsz=Math.floor(Math.min(vw*0.35,ctrlH*0.9,140));
     joyCanvas.width=jsz*2;joyCanvas.height=jsz*2;
     joyCanvas.style.width=jsz+'px';joyCanvas.style.height=jsz+'px';
     joyCanvas.style.display='block';
@@ -76,21 +76,21 @@ function resize(){
     joyCanvas.style.touchAction='none';
     JOY_R=jsz*0.75;THUMB_R=jsz*0.28;JOY_CX=jsz;JOY_CY=jsz;
     // 跳跃按钮：右下
-    const bsz=Math.floor(Math.min(vw*0.22,ctrlH*0.7,110));
+    const bsz=Math.floor(Math.min(vw*0.2,ctrlH*0.75,100));
     const jb=document.getElementById('jbtn');
     jb.style.cssText='display:block;position:fixed;z-index:100;touch-action:none;border-radius:50%;'
       +'width:'+bsz+'px;height:'+bsz+'px;'
-      +'right:'+Math.floor(vw*0.06)+'px;bottom:'+Math.floor(ctrlH*0.1)+'px;'
+      +'right:'+Math.floor(vw*0.06)+'px;bottom:'+Math.floor(ctrlH*0.08)+'px;'
       +'border:3px solid rgba(233,69,96,0.5);background:rgba(233,69,96,0.2);'
       +'color:#fff;font-size:'+Math.floor(bsz*0.3)+'px;font-weight:bold;font-family:monospace;'
       +'display:flex;align-items:center;justify-content:center';
     jb.textContent='JUMP';
-    // 蹲下按钮：在跳跃按钮下方
+    // 蹲下按钮：在跳跃按钮上方
     const db=document.getElementById('dbtn');
-    const dsz=Math.floor(bsz*0.65);
+    const dsz=Math.floor(bsz*0.6);
     db.style.cssText='display:block;position:fixed;z-index:100;touch-action:none;border-radius:50%;'
       +'width:'+dsz+'px;height:'+dsz+'px;'
-      +'right:'+Math.floor(vw*0.06+(bsz-dsz)/2)+'px;bottom:'+Math.floor(ctrlH*0.1+bsz+8)+'px;'
+      +'right:'+Math.floor(vw*0.06+(bsz-dsz)/2)+'px;bottom:'+Math.floor(ctrlH*0.08+bsz+6)+'px;'
       +'border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);'
       +'color:#fff;font-size:'+Math.floor(dsz*0.35)+'px;font-family:monospace;'
       +'display:flex;align-items:center;justify-content:center';
