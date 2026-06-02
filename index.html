@@ -265,12 +265,175 @@ function spawnObs(){
   else if(r<0.75&&score>30){const x=D.faceR?-40:JW+20;const ts=['fireball','saw'];const t=ts[Math.floor(Math.random()*2)];obs.push({x,dir:-1,w:t==='fireball'?16:22,h:t==='fireball'?16:22,y:GY-Math.random()*50-30,t,rot:0});}
   else{const dx=Math.max(30,Math.min(JW-50,D.x+(Math.random()-0.5)*250));const t=Math.random()<0.5?'drop':'bomb';warnX=dx;warnT=40;setTimeout(()=>{if(state==='run')obs.push({x:dx,dir:0,w:18,h:18,t,vy:3+Math.random()*2,y:-30});},400);}
 }
-function updObs(){for(let i=obs.length-1;i>=0;i--){const o=obs[i];if(o.dir===1)o.x-=speed;else if(o.dir===-1)o.x+=speed*0.9;else{o.y+=o.vy;if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){o.exploded=true;spark(o.x+10,o.y+12,20);if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){endGame();return;}}}if(o.t==='saw')o.rot=(o.rot||0)+0.3;if(o.x<-80||o.x>JW+80||o.y>JH+40){obs.splice(i,1);continue;}if(o.t==='bomb'&&o.exploded)continue;if(hitBox(o)){endGame();return;}}if(warnT<=0)warnX=null;}
-function hitBox(o){const b=D.box();let ox=o.x,oy=o.dir===1?GY-o.h:o.y;const r=b.x<ox+o.w-6&&b.x+b.w>ox+6&&b.y<oy+o.h-6&&b.y+b.h>oy+6;if(r){hitC++;if(hitC>=3)showTaunt('combo');}return r;}
+function updObs(){for(let i=obs.length-1;i>=0;i--){const o=obs[i];if(o.dir===1)o.x-=speed;else if(o.dir===-1)o.x+=speed*0.9;else{o.y+=o.vy;if(o.t==='bomb'&&!o.exploded&&o.y>GY-40){o.exploded=true;spark(o.x+10,o.y+12,20);if(Math.abs(D.x+16-o.x-10)<60&&Math.abs(D.y+20-o.y-12)<50){if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');}else{endGame();return;}}}if(o.t==='saw')o.rot=(o.rot||0)+0.3;if(o.x<-80||o.x>JW+80||o.y>JH+40){obs.splice(i,1);continue;}if(o.t==='bomb'&&o.exploded)continue;if(hitBox(o)){endGame();return;}}if(warnT<=0)warnX=null;}
+function hitBox(o){
+  const b=D.box();let ox=o.x,oy=o.dir===1?GY-o.h:o.y;
+  const r=b.x<ox+o.w-6&&b.x+b.w>ox+6&&b.y<oy+o.h-6&&b.y+b.h>oy+6;
+  if(r){
+    if(shieldActive){shieldActive=false;shieldTimer=0;spark(D.x+16,D.y+20,10);showTaunt('hit','🛡️ 护盾抵挡！');return false;}
+    hitC++;if(hitC>=3)showTaunt('combo');
+  }
+  return r;
+}
 function drawObs(){obs.forEach(o=>{let x=o.x,y=o.dir===1?GY-o.h:o.y;cx.fillStyle=o.dir===1?'#555':o.dir===-1?'#ff6b35':'#ffd700';switch(o.t){case'spike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y);cx.lineTo(x+14,GY);cx.fill();break;case'tallSpike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+8,y);cx.lineTo(x+16,GY);cx.fill();cx.fillRect(x+3,y+8,10,4);break;case'doubleSpike':cx.beginPath();cx.moveTo(x,GY);cx.lineTo(x+7,y+4);cx.lineTo(x+14,GY);cx.fill();cx.beginPath();cx.moveTo(x+16,GY);cx.lineTo(x+23,y);cx.lineTo(x+30,GY);cx.fill();break;case'fireball':cx.fillRect(x,y,16,16);cx.fillStyle='#ffaa00';cx.fillRect(x+3,y+3,10,10);break;case'saw':cx.save();cx.translate(x+11,y+11);cx.rotate(o.rot||0);cx.fillStyle='#aaa';for(let j=0;j<6;j++){cx.fillRect(-2,-10,4,4);cx.rotate(Math.PI/3);}cx.fillStyle='#555';cx.beginPath();cx.arc(0,0,4,0,Math.PI*2);cx.fill();cx.restore();break;case'drop':cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(x+9,y);cx.lineTo(x+18,y+18);cx.lineTo(x,y+18);cx.closePath();cx.fill();break;case'bomb':cx.fillStyle='#333';cx.beginPath();cx.arc(x+10,y+14,10,0,Math.PI*2);cx.fill();cx.fillStyle='#e94560';cx.fillRect(x+8,y,4,6);cx.fillStyle='#ff6b35';cx.fillRect(x+6,y-2,8,3);break;}});if(warnT>0&&warnX!==null){cx.fillStyle=`rgba(255,215,0,${(Math.sin(Date.now()/80)*0.3+0.4)*(warnT/50)})`;cx.fillRect(warnX-5,0,30,GY);cx.fillStyle='#ffd700';cx.beginPath();cx.moveTo(warnX+10,10);cx.lineTo(warnX+5,25);cx.lineTo(warnX+15,25);cx.closePath();cx.fill();cx.font='12px monospace';cx.textAlign='center';cx.fillText('⚠',warnX+10,40);warnT--;}}
 function spark(x,y,n){for(let i=0;i<n;i++)sparkP.push({x,y,vx:(Math.random()-0.5)*6,vy:-Math.random()*4-1,life:18+Math.random()*12,c:Math.random()>0.5?'#e94560':'#ff6b35'});}
 function updSpark(){for(let i=sparkP.length-1;i>=0;i--){const p=sparkP[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;if(--p.life<=0)sparkP.splice(i,1);}}
 function drawSpark(){sparkP.forEach(p=>{cx.globalAlpha=p.life/30;cx.fillStyle=p.c;cx.fillRect(p.x,p.y,3,3);});cx.globalAlpha=1;}
+// ===== 背景怪物 =====
+let monsters=[];
+let monsterSpawnT=0;
+function spawnMonster(){
+  const side=Math.random()<0.5?0:1; // 0=左飞入, 1=右飞入
+  monsters.push({
+    x:side?JW+30:-30,
+    y:15+Math.random()*50,
+    dir:side?-1:1,
+    speed:1.5+Math.random()*1,
+    wing:0, // 翅膀动画帧
+    wingT:0,
+    threw:false, // 是否已扔过障碍物
+    type:Math.floor(Math.random()*3), // 0=蝙蝠 1=鸟 2=龙
+    size:20+Math.random()*10
+  });
+}
+function updMonsters(dt){
+  monsterSpawnT+=dt;
+  if(monsterSpawnT>180&&score>20){ // 每3秒可能刷一只，需要一定分数
+    monsterSpawnT=0;
+    if(Math.random()<0.4)spawnMonster();
+  }
+  for(let i=monsters.length-1;i>=0;i--){
+    const m=monsters[i];
+    m.x+=m.speed*m.dir*dt;
+    m.wingT+=dt;if(m.wingT>6){m.wingT=0;m.wing^=1;}
+    // 飞到恐龙头顶附近时扔障碍物
+    if(!m.threw&&Math.abs(m.x-D.x)<100&&m.x>50&&m.x<JW-50){
+      m.threw=true;
+      const t=Math.random()<0.5?'drop':'bomb';
+      obs.push({x:m.x,dir:0,w:18,h:18,t,vy:2.5+Math.random()*1.5,y:m.y+m.size});
+      if(t==='bomb'){
+        // 怪物扔炸弹有警告
+        warnX=m.x;warnT=30;
+      }
+    }
+    // 飞出屏幕
+    if(m.x<-60||m.x>JW+60)monsters.splice(i,1);
+  }
+}
+function drawMonsters(){
+  monsters.forEach(m=>{
+    const x=m.x,y=m.y,s=m.size,f=m.wing;
+    cx.save();
+    // 怪物身体
+    switch(m.type){
+      case 0: // 蝙蝠
+        cx.fillStyle='#6b2fa0';
+        cx.beginPath();cx.arc(x,y+s*0.4,s*0.35,0,Math.PI*2);cx.fill();
+        // 翅膀
+        cx.fillStyle='#8b3fc0';
+        const wingY=f?-s*0.3:0;
+        cx.beginPath();cx.moveTo(x-s*0.2,y+s*0.2);cx.lineTo(x-s*0.8,y+wingY);cx.lineTo(x-s*0.1,y+s*0.1);cx.fill();
+        cx.beginPath();cx.moveTo(x+s*0.2,y+s*0.2);cx.lineTo(x+s*0.8,y+wingY);cx.lineTo(x+s*0.1,y+s*0.1);cx.fill();
+        // 眼睛
+        cx.fillStyle='#ff4444';cx.fillRect(x-s*0.12,y+s*0.25,3,3);cx.fillRect(x+s*0.06,y+s*0.25,3,3);
+        break;
+      case 1: // 怪鸟
+        cx.fillStyle='#2d5a1e';
+        cx.beginPath();cx.ellipse(x,y+s*0.3,s*0.4,s*0.25,0,0,Math.PI*2);cx.fill();
+        // 翅膀
+        cx.fillStyle='#3d7a2e';
+        const wy=f?-s*0.4:-s*0.1;
+        cx.beginPath();cx.moveTo(x-s*0.1,y+s*0.15);cx.lineTo(x-s*0.6,y+wy);cx.lineTo(x+s*0.1,y+s*0.2);cx.fill();
+        cx.beginPath();cx.moveTo(x+s*0.1,y+s*0.15);cx.lineTo(x+s*0.6,y+wy);cx.lineTo(x-s*0.1,y+s*0.2);cx.fill();
+        // 嘴
+        cx.fillStyle='#ffaa00';
+        cx.beginPath();cx.moveTo(x+s*0.35,y+s*0.3);cx.lineTo(x+s*0.6,y+s*0.35);cx.lineTo(x+s*0.35,y+s*0.4);cx.fill();
+        break;
+      case 2: // 小龙
+        cx.fillStyle='#8b0000';
+        cx.beginPath();cx.ellipse(x,y+s*0.35,s*0.45,s*0.3,0,0,Math.PI*2);cx.fill();
+        // 翅膀
+        cx.fillStyle='#aa2222';
+        const dy=f?-s*0.5:-s*0.15;
+        cx.beginPath();cx.moveTo(x-s*0.15,y+s*0.1);cx.lineTo(x-s*0.7,y+dy);cx.lineTo(x,y+s*0.15);cx.fill();
+        cx.beginPath();cx.moveTo(x+s*0.15,y+s*0.1);cx.lineTo(x+s*0.7,y+dy);cx.lineTo(x,y+s*0.15);cx.fill();
+        // 眼睛+火焰
+        cx.fillStyle='#ff6600';cx.fillRect(x-s*0.15,y+s*0.2,4,4);cx.fillRect(x+s*0.08,y+s*0.2,4,4);
+        if(f){cx.fillStyle='#ff4400';cx.fillRect(x+(m.dir<0?-s*0.5:s*0.3),y+s*0.3,8,3);}
+        break;
+    }
+    cx.restore();
+  });
+}
+
+// ===== 道具系统 =====
+let powerups=[];
+let powerupSpawnT=0;
+let shieldActive=false,shieldTimer=0;
+let slowActive=false,slowTimer=0;
+
+function spawnPowerup(){
+  const types=['shield','slow','heart'];
+  const t=types[Math.floor(Math.random()*types.length)];
+  powerups.push({
+    x:JW+20,
+    y:30+Math.random()*(GY-60),
+    t:t,
+    w:18,h:18,
+    bob:Math.random()*Math.PI*2 // 上下浮动
+  });
+}
+function updPowerups(dt){
+  powerupSpawnT+=dt;
+  if(powerupSpawnT>400&&score>50){ // 每 ~6.5 秒可能刷一个
+    powerupSpawnT=0;
+    if(Math.random()<0.35)spawnPowerup();
+  }
+  // 盾牌和减速计时
+  if(shieldActive){shieldTimer-=dt;if(shieldTimer<=0)shieldActive=false;}
+  if(slowActive){slowTimer-=dt;if(slowTimer<=0){slowActive=false;speed=Math.max(4,speed);}}
+
+  for(let i=powerups.length-1;i>=0;i--){
+    const p=powerups[i];
+    p.x-=speed*dt*0.5; // 比障碍物慢一点
+    p.bob+=dt*0.08;
+    // 碰撞检测
+    const b=D.box();
+    const py=p.y+Math.sin(p.bob)*5;
+    if(b.x<p.x+p.w&&b.x+b.w>p.x&&b.y<py+p.h&&b.y+b.h>py){
+      // 拾取
+      if(p.t==='shield'){shieldActive=true;shieldTimer=300;showTaunt('hit','🛡️ 护盾激活！');}
+      else if(p.t==='slow'){slowActive=true;slowTimer=240;speed=Math.max(4,speed*0.5);showTaunt('hit','🐌 时间减速！');}
+      else if(p.t==='heart'){score+=20;showTaunt('hit','❤️ 加分！');}
+      powerups.splice(i,1);continue;
+    }
+    if(p.x<-30)powerups.splice(i,1);
+  }
+}
+function drawPowerups(){
+  powerups.forEach(p=>{
+    const x=p.x,y=p.y+Math.sin(p.bob)*5;
+    // 发光底圈
+    cx.fillStyle=p.t==='shield'?'rgba(0,150,255,0.15)':p.t==='slow'?'rgba(0,255,150,0.15)':'rgba(255,100,100,0.15)';
+    cx.beginPath();cx.arc(x+9,y+9,14,0,Math.PI*2);cx.fill();
+    // 图标
+    cx.font='16px monospace';cx.textAlign='center';
+    if(p.t==='shield'){cx.fillStyle='#00aaff';cx.fillText('🛡️',x+9,y+14);}
+    else if(p.t==='slow'){cx.fillStyle='#00ff96';cx.fillText('⏳',x+9,y+14);}
+    else{cx.fillStyle='#ff6464';cx.fillText('❤️',x+9,y+14);}
+  });
+  // 显示当前激活的道具状态
+  let sy=JH-10;
+  if(shieldActive){
+    cx.fillStyle='rgba(0,150,255,0.6)';cx.font='10px monospace';cx.textAlign='left';
+    cx.fillText('🛡️ '+Math.ceil(shieldTimer/60)+'s',10,sy);sy-=14;
+  }
+  if(slowActive){
+    cx.fillStyle='rgba(0,255,150,0.6)';cx.font='10px monospace';cx.textAlign='left';
+    cx.fillText('⏳ '+Math.ceil(slowTimer/60)+'s',10,sy);
+  }
+}
+
 let gd=0;
 
 // ===== 背景视差动画 =====
@@ -339,7 +502,7 @@ function pad(n){return String(Math.floor(n)).padStart(5,'0');}
 let state='idle',score=0,speed=MOBILE?4:5,hi=parseInt(localStorage.getItem('dh')||'0');
 let spawnT=0,spawnI=70,keys={},dist=0,lastTS=0;
 document.getElementById('hi').textContent=pad(hi);
-function init(){D.reset();obs=[];sparkP=[];score=0;speed=MOBILE?4:5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;dist=0;idleT=0;hitC=0;lastTS=0;document.getElementById('sc').textContent='00000';}
+function init(){D.reset();obs=[];sparkP=[];score=0;speed=MOBILE?4:5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;dist=0;idleT=0;hitC=0;lastTS=0;monsters=[];monsterSpawnT=0;powerups=[];powerupSpawnT=0;shieldActive=false;shieldTimer=0;slowActive=false;slowTimer=0;document.getElementById('sc').textContent='00000';}
 function startGame(){init();state='run';showTaunt('hit',Math.random()<0.5?'🎮 开始了！':'🏃 冲啊！');}
 function endGame(){state='over';D.vx=0;hitC=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
 
@@ -362,14 +525,16 @@ function loop(ts){
   if(state==='run'){
     score+=0.2*dt;document.getElementById('sc').textContent=pad(score);
     dist+=speed*dt;
-    if(MOBILE){if(speed<10)speed=4+dist*0.00006;}
-    else{if(speed<14)speed=5+dist*0.0001;}
+    if(!slowActive){
+      if(MOBILE){if(speed<10)speed=4+dist*0.00006;}
+      else{if(speed<14)speed=5+dist*0.0001;}
+    }
     if(speed>10&&Math.random()<0.002*dt)showTaunt('fast');
     spawnI=Math.max(20,50-Math.floor(speed*3));spawnT+=dt;
     if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
-    updObs();D.upd();updSpark();
+    updObs();D.upd();updSpark();updMonsters(dt);updPowerups(dt);
   }
-  drawObs();D.draw();drawSpark();drawHUD();drawTaunt();
+  drawMonsters();drawObs();D.draw();drawSpark();drawPowerups();drawHUD();drawTaunt();
   if(state==='idle'){idleT++;if(idleT>150&&idleT%150===0)showTaunt('idle');cx.fillStyle='#e94560';cx.font='16px monospace';cx.textAlign='center';if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 开始':'按 空格 开始',JW/2,90);cx.font='11px monospace';cx.fillStyle='#666';cx.fillText(MOBILE?'摇盘移动 | JUMP跳跃':'← → 移动 | 空格跳跃 | ↓蹲',JW/2,115);}else idleT=0;
   if(state==='over'){cx.fillStyle='#e94560';cx.font='bold 22px monospace';cx.textAlign='center';cx.fillText('GAME OVER',JW/2,80);cx.font='14px monospace';if(Math.floor(Date.now()/350)%2)cx.fillText(MOBILE?'👇 点 JUMP 重开':'按 空格 重开',JW/2,105);cx.fillStyle='#ff6b35';cx.fillText('得分: '+pad(score),JW/2,125);cx.fillStyle='#888';cx.fillText('距离: '+Math.floor(dist)+'m',JW/2,145);}
   if(MOBILE)drawJoy();
