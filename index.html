@@ -136,9 +136,10 @@ function joyCalc(clientX,clientY){
   const d=Math.sqrt(px*px+py*py);
   if(d>JOY_R){px=px/d*JOY_R;py=py/d*JOY_R;}
   joy.rawX=px/JOY_R;joy.rawY=py/JOY_R;joy.active=true;
-  const TH=0.2;
-  joy.dx=Math.abs(joy.rawX)<TH?0:(joy.rawX>0?1:-1);
-  joy.dy=Math.abs(joy.rawY)<TH?0:(joy.rawY>0?1:-1);
+  // 摇盘只控制左右，Y轴死区加大防误触跳跃
+  const THX=0.2,THY=0.6;
+  joy.dx=Math.abs(joy.rawX)<THX?0:(joy.rawX>0?1:-1);
+  joy.dy=0; // 禁用摇盘Y轴，跳跃只由右侧按钮触发
 }
 function joyReset(){joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;}
 
@@ -272,8 +273,6 @@ function loop(ts){
     if(joy.dx<0||keys.ArrowLeft||keys.KeyA)D.moveL();
     else if(joy.dx>0||keys.ArrowRight||keys.KeyD)D.moveR();
     else D.stopM();
-    if(joy.dy<0){D.jump();joy.dy=0;}
-    D.setDuck(joy.dy>0);
   }
 
   cx.clearRect(0,0,JW,JH);
