@@ -26,6 +26,7 @@ canvas#c{display:block}
 <div class="info" id="infoBar"><span class="warn">←→</span>移动 <span class="warn">空格</span>跳 <span class="warn">↓</span>蹲</div>
 <canvas id="joyC"></canvas>
 <div id="jbtn"></div>
+<div id="dbtn"></div>
 
 <script>
 'use strict';
@@ -84,6 +85,16 @@ function resize(){
       +'color:#fff;font-size:'+Math.floor(bsz*0.3)+'px;font-weight:bold;font-family:monospace;'
       +'display:flex;align-items:center;justify-content:center';
     jb.textContent='JUMP';
+    // 蹲下按钮：在跳跃按钮下方
+    const db=document.getElementById('dbtn');
+    const dsz=Math.floor(bsz*0.65);
+    db.style.cssText='display:block;position:fixed;z-index:100;touch-action:none;border-radius:50%;'
+      +'width:'+dsz+'px;height:'+dsz+'px;'
+      +'right:'+Math.floor(vw*0.06+(bsz-dsz)/2)+'px;bottom:'+Math.floor(ctrlH*0.1+bsz+8)+'px;'
+      +'border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.08);'
+      +'color:#fff;font-size:'+Math.floor(dsz*0.35)+'px;font-family:monospace;'
+      +'display:flex;align-items:center;justify-content:center';
+    db.textContent='▼';
   }else{
     const availW=vw-32,availH=vh-50;
     let cw=Math.min(availW,800),ch=Math.floor(cw/ratio);
@@ -92,6 +103,7 @@ function resize(){
     cv.style.width=cw+'px';cv.style.height=ch+'px';
     joyCanvas.style.display='none';
     document.getElementById('jbtn').style.display='none';
+    document.getElementById('dbtn').style.display='none';
   }
 }
 resize();
@@ -144,6 +156,7 @@ function joyCalc(clientX,clientY){
 function joyReset(){joy.dx=0;joy.dy=0;joy.rawX=0;joy.rawY=0;joy.active=false;}
 
 const jbtn=document.getElementById('jbtn');
+const dbtn=document.getElementById('dbtn');
 function jumpTrigger(){if(state==='run')D.jump();else startGame();}
 
 // 全局 touchstart
@@ -151,6 +164,7 @@ document.addEventListener('touchstart',e=>{
   for(const t of e.changedTouches){
     const rj=joyCanvas.getBoundingClientRect();
     const rb=jbtn.getBoundingClientRect();
+    const rd=dbtn.getBoundingClientRect();
     // 判断触摸点在哪个控件上
     if(t.clientX>=rj.left&&t.clientX<=rj.right&&t.clientY>=rj.top&&t.clientY<=rj.bottom){
       touchMap.set(t.identifier,'joy');
@@ -160,6 +174,10 @@ document.addEventListener('touchstart',e=>{
       jbtn.style.background='rgba(233,69,96,0.7)';
       jbtn.style.borderColor='#e94560';
       jumpTrigger();
+    }else if(t.clientX>=rd.left&&t.clientX<=rd.right&&t.clientY>=rd.top&&t.clientY<=rd.bottom){
+      touchMap.set(t.identifier,'duck');
+      dbtn.style.background='rgba(255,255,255,0.3)';
+      if(state==='run')D.setDuck(true);
     }
   }
 },{passive:true});
@@ -186,6 +204,9 @@ function touchEnd(e){
     }else if(role==='jump'){
       jbtn.style.background='rgba(233,69,96,0.2)';
       jbtn.style.borderColor='rgba(233,69,96,0.5)';
+    }else if(role==='duck'){
+      dbtn.style.background='rgba(255,255,255,0.08)';
+      D.setDuck(false);
     }
   }
   // 所有手指离开
