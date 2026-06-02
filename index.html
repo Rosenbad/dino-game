@@ -45,17 +45,15 @@ canvas#c{display:block;touch-action:none}
 <div class="jbtn" id="jbtn">JUMP</div>
 
 <script>
-// 错误捕获：显示在屏幕上
-window.onerror=function(m,s,l,c,e){
-  document.body.innerHTML='<pre style="color:red;padding:20px;font-size:14px;white-space:pre-wrap">ERROR: '+m+'\nLine: '+l+' Col: '+c+'\n'+(e&&e.stack?e.stack.split('\n').slice(0,3).join('\n'):'')+'</pre>';
-  return true;
-};
 'use strict';
 
 // ===== 基础 =====
 const cv=document.getElementById('c'),cx=cv.getContext('2d',{alpha:false});
 const JW=800,JH=260,GY=210,MSPEED=5;
 const MOBILE='ontouchstart'in window||navigator.maxTouchPoints>0;
+
+// 摇盘参数（必须在 resize 之前声明）
+let JOY_R=80,THUMB_R=24,JOY_CX=80,JOY_CY=80;
 
 // ===== 画布自适应 =====
 function resize(){
@@ -108,7 +106,6 @@ if(MOBILE){
 }
 
 // ===== 摇盘 =====
-let JOY_R=80,THUMB_R=24,JOY_CX=80,JOY_CY=80;
 const joyCanvas=document.getElementById('jc');
 const jctx=joyCanvas.getContext('2d');
 const joy={dx:0,dy:0,rawX:0,rawY:0,active:false};
