@@ -255,10 +255,10 @@ function drawHUD(){cx.fillStyle='rgba(0,0,0,0.3)';cx.fillRect(10,8,120,18);cx.st
 function pad(n){return String(Math.floor(n)).padStart(5,'0');}
 
 // ===== 游戏 =====
-let state='idle',score=0,speed=5,hi=parseInt(localStorage.getItem('dh')||'0');
+let state='idle',score=0,speed=MOBILE?4:5,hi=parseInt(localStorage.getItem('dh')||'0');
 let spawnT=0,spawnI=70,keys={},dist=0,lastTS=0;
 document.getElementById('hi').textContent=pad(hi);
-function init(){D.reset();obs=[];sparkP=[];score=0;speed=5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;dist=0;idleT=0;hitC=0;lastTS=0;document.getElementById('sc').textContent='00000';}
+function init(){D.reset();obs=[];sparkP=[];score=0;speed=MOBILE?4:5;spawnT=0;spawnI=40;keys={};warnX=null;warnT=0;dist=0;idleT=0;hitC=0;lastTS=0;document.getElementById('sc').textContent='00000';}
 function startGame(){init();state='run';showTaunt('hit',Math.random()<0.5?'🎮 开始了！':'🏃 冲啊！');}
 function endGame(){state='over';D.vx=0;hitC=0;showTaunt('die');if(score>hi){hi=Math.floor(score);localStorage.setItem('dh',hi);document.getElementById('hi').textContent=pad(hi);}}
 
@@ -281,7 +281,9 @@ function loop(ts){
   drawGround();
   if(state==='run'){
     score+=0.2*dt;document.getElementById('sc').textContent=pad(score);
-    dist+=speed*dt;if(speed<14)speed=5+dist*0.0001;
+    dist+=speed*dt;
+    if(MOBILE){if(speed<10)speed=4+dist*0.00006;}
+    else{if(speed<14)speed=5+dist*0.0001;}
     if(speed>10&&Math.random()<0.002*dt)showTaunt('fast');
     spawnI=Math.max(20,50-Math.floor(speed*3));spawnT+=dt;
     if(spawnT>=spawnI){spawnT=0;spawnObs();if(speed>10&&Math.random()<0.3)spawnObs();}
